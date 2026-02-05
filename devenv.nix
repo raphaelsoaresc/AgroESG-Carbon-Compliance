@@ -1,0 +1,48 @@
+{ pkgs, lib, config, inputs, ... }:
+
+{
+  # https://devenv.sh/basics/
+  env.GREET = "devenv";
+
+  # https://devenv.sh/packages/
+  packages = [ pkgs.git ];
+
+  # https://devenv.sh/services/
+  services.postgres = {
+    enable = true;
+    package = pkgs.postgresql_17;
+    extensions = ps: [ ps.postgis ]; 
+    listen_addresses = "127.0.0.1"; 
+    # Corrigido para plural (initialDatabases)
+    initialDatabases = [
+      { name = "agro_risk"; }
+    ];
+    
+    # Corrigido para usar o banco e usuário definidos
+    initialScript = ''
+      CREATE USER admin WITH PASSWORD 'admin123' SUPERUSER;
+      GRANT ALL PRIVILEGES ON DATABASE agro_risk TO admin;
+    '';
+  };
+
+  # https://devenv.sh/scripts/
+  scripts.hello.exec = ''
+    echo hello from $GREET
+  '';
+
+  # https://devenv.sh/basics/
+  enterShell = ''
+    hello         # Run scripts directly
+    git --version # Use packages
+  '';
+
+  # https://devenv.sh/tests/
+  enterTest = ''
+    echo "Running tests"
+    git --version | grep --color=auto "${pkgs.git.version}"
+  '';
+
+  # See full reference at https://devenv.sh/reference/options/
+  cachix.enable = false;
+
+}

@@ -1,0 +1,19 @@
+[project]
+name = "carbon-credit"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "jupyterlab>=4.5.3",
+    "numpy==1.26.4",            # Mantenha fixo na última da linha 1.x para evitar conflitos ABI
+    "pandas>=2.2.2,<3.0.0",     # EVITE a 3.0 agora; ela removeu funções legadas que você verá em tutoriais
+    "geopandas>=1.0.1",         # Versão estável com suporte a Shapely 2.0 nativo
+    "pyogrio>=0.9.0",           # Engine de leitura ultra-rápida (essencial para Shapefiles/CAR)
+    "pyproj",                   # OBRIGATÓRIO para converter coordenadas (ex: graus para metros)
+    "shapely>=2.0.0",           
+    "psycopg2-binary>=2.9.10",  # Driver para conectar Python ao PostgreSQL
+    "python-dotenv>=1.0.1",
+    "geoalchemy2>=0.15.0",     
+    "sqlalchemy>=2.0.30",       # Use a v2 para aprender a sintaxe moderna de SQL no Python
+]
