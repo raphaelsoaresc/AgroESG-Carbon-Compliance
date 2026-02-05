@@ -24,3 +24,5 @@ devenv.local.yaml
 *.shp
 *.zip
 .env
+
+data/raw
