@@ -1,0 +1,12 @@
+agro_credit_transform:
+  outputs:
+    dev:
+      dbname: agro_risk
+      host: localhost
+      pass: admin123
+      port: 5432
+      schema: analytics
+      threads: 4
+      type: postgres
+      user: admin
+  target: dev
