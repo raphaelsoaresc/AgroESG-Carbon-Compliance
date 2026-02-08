@@ -1,4 +1,4 @@
-# Python-generated files
+# --- Python & Build ---
 __pycache__/
 *.py[oc]
 build/
@@ -6,23 +6,37 @@ dist/
 wheels/
 *.egg-info
 
-# Virtual environments
+# --- Virtual environments ---
 .venv
 
-# Devenv
+# --- Devenv & Direnv ---
 .devenv*
 devenv.local.nix
 devenv.local.yaml
-
-# direnv
 .direnv
 
-# pre-commit
+# --- Pre-commit ---
 .pre-commit-config.yaml
 
+# --- DADOS (Ignorar arquivos pesados) ---
 *.csv
 *.shp
+*.shx
+*.dbf
 *.zip
-.env
+data/raw/
 
-data/raw
+# --- DBT (ESSENCIAL ADICIONAR ISSO) ---
+target/
+dbt_packages/
+dbt_modules/
+logs/
+*.log
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints
+
+# --- Configurações Locais ---
+.env
+.DS_Store
+.vscode/
