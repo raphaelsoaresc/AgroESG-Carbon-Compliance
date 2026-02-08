@@ -83,5 +83,5 @@ Como próximo passo na jornada de Analytics Engineering, a lógica complexa que 
 * [ ] **Tests:** Implementar testes (ex: garantir que não existem geometrias nulas na tabela final).
 
 ---
-**Autor:** [Seu Nome]
+**Autor:** Raphael Soares
 *Projeto desenvolvido para portfólio de Analytics Engineering.*
