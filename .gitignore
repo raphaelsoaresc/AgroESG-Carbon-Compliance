@@ -2,6 +2,7 @@
 # Arquivo JSON da Service Account do BigQuery
 agroesg-carbon-compliance-f462eb0bb473.json
 *.json
+credentials.json
 # Arquivos de ambiente e configurações locais
 .env
 profiles.yml
