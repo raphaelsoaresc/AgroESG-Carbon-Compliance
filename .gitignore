@@ -1,42 +1,50 @@
-# --- Python & Build ---
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# === SEGURANÇA E CREDENCIAIS (CRÍTICO) ===
+# Arquivo JSON da Service Account do BigQuery
+agroesg-carbon-compliance-f462eb0bb473.json
+*.json
+# Arquivos de ambiente e configurações locais
+.env
+profiles.yml
+user.yml
+.DS_Store
 
-# --- Virtual environments ---
-.venv
-
-# --- Devenv & Direnv ---
-.devenv*
-devenv.local.nix
-devenv.local.yaml
-.direnv
-
-# --- Pre-commit ---
-.pre-commit-config.yaml
-
-# --- DADOS (Ignorar arquivos pesados) ---
-*.csv
-*.shp
-*.shx
-*.dbf
-*.zip
-data/raw/
-
-# --- DBT (ESSENCIAL ADICIONAR ISSO) ---
+# === dbt (ESSENCIAL) ===
 target/
 dbt_packages/
 dbt_modules/
 logs/
 *.log
 
-# --- Jupyter Notebooks ---
-.ipynb_checkpoints
+# === DADOS E GIS (EVITAR SUBIR ARQUIVOS PESADOS) ===
+# Ignora bases brutas do IBAMA/SIGEF e arquivos temporários de mapas
+*.csv
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.zip
+data/raw/
+data/processed/
 
-# --- Configurações Locais ---
-.env
-.DS_Store
+# === PYTHON E AMBIENTES VIRTUAIS ===
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+venv/
+
+# === FERRAMENTAS E IDEs ===
 .vscode/
+.idea/
+.ipynb_checkpoints
+.pre-commit-config.yaml
+
+# === DEVENV & DIRENV ===
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+.direnv
