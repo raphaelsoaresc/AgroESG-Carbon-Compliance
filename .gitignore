@@ -48,3 +48,4 @@ venv/
 devenv.local.nix
 devenv.local.yaml
 .direnv
+.user.yml
