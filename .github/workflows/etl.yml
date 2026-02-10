@@ -44,5 +44,5 @@ jobs:
           # Mapeia os Secrets/Vars do GitHub para as variáveis de ambiente que o Python espera
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           BQ_DATASET_ID: ${{ vars.BQ_DATASET_ID }}
-          IBAMA_URL_CSV: ${{ vars.IBAMA_URL_CSV }}
+          IBAMA_URL_CSV: ${{ secrets.IBAMA_URL_CSV }}
         run: uv run src/load_ibama.py
