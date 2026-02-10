@@ -1,0 +1,48 @@
+name: Daily ETL Pipeline (IBAMA)
+
+on:
+  # Roda todo dia às 06:00 AM (Horário de Brasília aprox. - UTC 09:00)
+  schedule:
+    - cron: '0 9 * * *'
+  # Permite rodar manualmente clicando num botão (para testes)
+  workflow_dispatch:
+
+jobs:
+  ingest-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Baixa o código do repositório
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Instala o 'uv' (Super rápido)
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # 3. Configura Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version" # Ou "3.11" se não tiver o arquivo
+
+      # 4. Instala dependências (DuckDB, Pandas, Google Cloud, Chardet)
+      - name: Install dependencies
+        run: uv sync --frozen # Usa o uv.lock para garantir versões exatas
+
+      # 5. Autenticação no Google Cloud
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # 6. Executa o Script do IBAMA
+      - name: Run IBAMA Ingestion
+        env:
+          # Mapeia os Secrets/Vars do GitHub para as variáveis de ambiente que o Python espera
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          BQ_DATASET_ID: ${{ vars.BQ_DATASET_ID }}
+          IBAMA_URL_CSV: ${{ vars.IBAMA_URL_CSV }}
+        run: uv run src/extract_load_ibama.py
