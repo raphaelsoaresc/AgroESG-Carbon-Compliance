@@ -21,4 +21,6 @@ dependencies = [
     "duckdb>=1.4.4",
     "dbt-duckdb>=1.10.0",
     "chardet>=5.2.0",
+    "curl-cffi>=0.14.0",
+    "fake-useragent>=2.2.0",
 ]

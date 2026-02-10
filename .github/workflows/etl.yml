@@ -46,9 +46,9 @@ jobs:
 
       # 6. Executa o Script do IBAMA
       - name: Run IBAMA Ingestion
-        env:
-          # Mapeia os Secrets/Vars do GitHub para as variáveis de ambiente que o Python espera
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          BQ_DATASET_ID: ${{ vars.BQ_DATASET_ID }}
-          IBAMA_URL_CSV: ${{ secrets.IBAMA_URL_CSV }}
-        run: uv run src/load_ibama.py
+        run: |
+          export GCP_PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
+          export BQ_DATASET_ID="${{ vars.BQ_DATASET_ID }}"
+          export IBAMA_URL_CSV="${{ secrets.IBAMA_URL_CSV }}"
+          GCS_BUCKET_NAME: ${{ vars.GCS_BUCKET_NAME }}
+          uv run src/load_ibama.py
