@@ -50,5 +50,5 @@ jobs:
           export GCP_PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
           export BQ_DATASET_ID="${{ vars.BQ_DATASET_ID }}"
           export IBAMA_URL_CSV="${{ secrets.IBAMA_URL_CSV }}"
-          GCS_BUCKET_NAME: ${{ vars.GCS_BUCKET_NAME }}
+          export GCS_BUCKET_NAME="${{ vars.GCS_BUCKET_NAME }}"
           uv run src/load_ibama.py
