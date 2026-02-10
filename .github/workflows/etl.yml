@@ -16,6 +16,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Mascarar caminhos internos para o log ficar limpo
+      - name: Hide sensitive paths
+        run: |
+          echo "::add-mask::$GITHUB_WORKSPACE"
+          echo "::add-mask::/home/runner/work"
+
       # 2. Instala o 'uv' (Super rápido)
       - name: Install uv
         uses: astral-sh/setup-uv@v5

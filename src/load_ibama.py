@@ -2,7 +2,7 @@ import os
 import requests
 import zipfile
 import duckdb
-import chardet  # <--- Biblioteca nova para detecção
+import chardet
 from pathlib import Path
 from google.cloud import bigquery
 from google.api_core.exceptions import NotFound
@@ -10,22 +10,25 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configurações
+# Configurações / Settings
 PROJECT_ID = os.getenv("GCP_PROJECT_ID")
-DATASET_ID = os.getenv("BQ_DATASET_ID") # Aqui define que vai para agro_esg_raw
+DATASET_ID = os.getenv("BQ_DATASET_ID") 
 IBAMA_URL = os.getenv("IBAMA_URL_CSV")
 TABLE_NAME = "ibama_embargos_raw"
 
-# Caminhos Temporários
+# Caminhos Temporários / Temporary Paths
 TEMP_DIR = Path("temp_data")
 ZIP_FILE = TEMP_DIR / "ibama.zip"
 PARQUET_FILE = TEMP_DIR / "ibama_embargos.parquet"
 
 def detect_encoding(file_path):
-    """Lê os primeiros 100KB do arquivo para adivinhar o encoding."""
+    """
+    Leio os primeiros 100KB do arquivo para identificar a codificação de caracteres.
+    I read the first 100KB of the file to identify the character encoding.
+    """
     print("🕵️ Detectando encoding do arquivo...")
     with open(file_path, 'rb') as f:
-        rawdata = f.read(100000) # Lê apenas o começo para ser rápido
+        rawdata = f.read(100000) 
     
     result = chardet.detect(rawdata)
     encoding = result['encoding']
@@ -33,17 +36,20 @@ def detect_encoding(file_path):
     
     print(f"   Encoding detectado: {encoding} (Confiança: {confidence})")
     
-    # Fallback de segurança se falhar a detecção
+    # Fallback de segurança / Safety fallback
     if not encoding:
         return 'windows-1252'
         
-    # Ajuste fino: chardet as vezes retorna 'ISO-8859-1', mas 'windows-1252' é mais seguro para PT-BR
     if encoding.upper() == 'ISO-8859-1':
         return 'windows-1252'
         
     return encoding
 
 def get_remote_version():
+    """
+    Obtenho o ETag ou Last-Modified do servidor sem baixar o arquivo.
+    I get the ETag or Last-Modified from the server without downloading the file.
+    """
     try:
         response = requests.head(IBAMA_URL, timeout=10, verify=False)
         response.raise_for_status()
@@ -54,6 +60,10 @@ def get_remote_version():
         return "FORCE_UPDATE"
 
 def get_stored_version(client, table_ref):
+    """
+    Consulto a versão armazenada na última carga no BigQuery.
+    I query the version stored during the last load in BigQuery.
+    """
     query = f"SELECT _source_version FROM `{table_ref}` LIMIT 1"
     try:
         query_job = client.query(query)
@@ -67,14 +77,15 @@ def extract_load_ibama():
     print(f"--- INGESTÃO RAW: IBAMA (Auto-Encoding) ---")
     
     client = bigquery.Client(project=PROJECT_ID)
-    # Monta o caminho: projeto.agro_esg_raw.ibama_embargos_raw
     table_ref = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_NAME}"
 
-    # 1. VERIFICAÇÃO
+    # 1. VERIFICAÇÃO / CHECK
     print("🔍 Verificando atualizações...")
     remote_version = get_remote_version()
     stored_version = get_stored_version(client, table_ref)
 
+    # Se as versões forem iguais, encerro o script.
+    # If versions match, I stop the script.
     if remote_version != "FORCE_UPDATE" and remote_version == stored_version:
         print("✅ Dados já estão atualizados. Nenhuma ação necessária.")
         return
@@ -84,6 +95,8 @@ def extract_load_ibama():
     TEMP_DIR.mkdir(exist_ok=True)
 
     # 2. EXTRACT
+    # Baixo o arquivo ZIP do servidor.
+    # I download the ZIP file from the server.
     print(f"⬇️ Baixando arquivo...")
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
@@ -97,6 +110,8 @@ def extract_load_ibama():
         return
 
     # 3. UNZIP
+    # Extraio o ZIP e localizo o arquivo CSV.
+    # I extract the ZIP and locate the CSV file.
     print("📦 Extraindo ZIP...")
     csv_path = None
     try:
@@ -114,10 +129,12 @@ def extract_load_ibama():
         print("❌ Nenhum CSV encontrado.")
         return
 
-    # 4. DETECT ENCODING (A Mágica acontece aqui)
+    # 4. DETECT ENCODING
     detected_enc = detect_encoding(csv_path)
 
     # 5. TRANSFORM: CSV -> Parquet (DuckDB)
+    # Converto CSV para Parquet usando DuckDB e adiciono metadados de versão.
+    # I convert CSV to Parquet using DuckDB and add version metadata.
     print(f"🦆 DuckDB: Convertendo usando encoding '{detected_enc}'...")
     con = duckdb.connect()
     try:
@@ -147,6 +164,8 @@ def extract_load_ibama():
         con.close()
 
     # 6. LOAD
+    # Carrego o arquivo Parquet para o BigQuery (substituindo a tabela).
+    # I load the Parquet file into BigQuery (replacing the table).
     print(f"🚀 Enviando para: {table_ref}")
     job_config = bigquery.LoadJobConfig(
         source_format=bigquery.SourceFormat.PARQUET,
