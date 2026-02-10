@@ -1,48 +1,66 @@
 { pkgs, lib, config, inputs, ... }:
 
 {
-  # https://devenv.sh/basics/
-  env.GREET = "devenv";
+  # Variáveis de ambiente
+  env.GREET = "AgroESG Project";
 
-  # https://devenv.sh/packages/
-  packages = [ pkgs.git ];
+  # 1. Ativação de Linguagens (Recomendado para usar com uv)
+  languages.python = {
+    enable = true;
+    uv.enable = true;
+    # Cria o venv automaticamente se não existir
+    venv.enable = true; 
+  };
 
-  # https://devenv.sh/services/
+  # 2. Pacotes do Sistema (binários que você usa no terminal)
+  packages = [
+    pkgs.duckdb  # O motor do banco de dados
+    pkgs.git
+  ];
+
+  # 3. Serviços (PostgreSQL com PostGIS para dados geoespaciais do IBAMA)
   services.postgres = {
     enable = true;
     package = pkgs.postgresql_17;
     extensions = ps: [ ps.postgis ]; 
     listen_addresses = "127.0.0.1"; 
-    # Corrigido para plural (initialDatabases)
     initialDatabases = [
       { name = "agro_risk"; }
     ];
     
-    # Corrigido para usar o banco e usuário definidos
     initialScript = ''
-      CREATE USER admin WITH PASSWORD 'admin123' SUPERUSER;
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'admin') THEN
+          CREATE USER admin WITH PASSWORD 'admin123' SUPERUSER;
+        END IF;
+      END
+      $$;
       GRANT ALL PRIVILEGES ON DATABASE agro_risk TO admin;
     '';
   };
 
-  # https://devenv.sh/scripts/
-  scripts.hello.exec = ''
-    echo hello from $GREET
-  '';
+  # 4. Scripts auxiliares
+  scripts.hello.exec = "echo Bem-vindo ao $GREET";
 
-  # https://devenv.sh/basics/
+  # 5. Comandos executados ao entrar no terminal (devenv shell)
   enterShell = ''
-    hello         # Run scripts directly
-    git --version # Use packages
+    hello
+    echo "Python version: $(python --version)"
+    echo "DuckDB version: $(duckdb --version)"
+    # Dica: uv sync garante que as libs python (dbt, duckdb-python) estejam instaladas
+    uv sync
   '';
 
-  # https://devenv.sh/tests/
+  # 6. Testes básicos de sanidade
   enterTest = ''
-    echo "Running tests"
-    git --version | grep --color=auto "${pkgs.git.version}"
+    echo "Running environment checks..."
+    duckdb --version
+    uv --version
   '';
 
-  # See full reference at https://devenv.sh/reference/options/
-  cachix.enable = false;
+  dotenv.enable = true;
 
+  # Desativa o cachix se não estiver usando
+  cachix.enable = false;
 }

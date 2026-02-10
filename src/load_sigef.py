@@ -10,10 +10,10 @@ load_dotenv()
 PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 DATASET_ID = os.getenv("BQ_DATASET_ID")
 SHAPEFILE_PATH = os.getenv("SIGEF_PATH")
-TABLE_ID = os.getenv("TABLE_ID")
+TABLE_ID = "sigef_mt"
 
 if not all([PROJECT_ID, DATASET_ID, SHAPEFILE_PATH, TABLE_ID]):
-    raise ValueError("Erro: Verifique se GCP_PROJECT_ID, BQ_DATASET_ID, SIGEF_PATH e TABLE_ID estão no .env")
+    raise ValueError("Erro: Verifique se GCP_PROJECT_ID, BQ_DATASET_ID e SIGEF_PATH estão no .env")
 
 
 def load_sigef():
