@@ -45,4 +45,4 @@ jobs:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           BQ_DATASET_ID: ${{ vars.BQ_DATASET_ID }}
           IBAMA_URL_CSV: ${{ vars.IBAMA_URL_CSV }}
-        run: uv run src/extract_load_ibama.py
+        run: uv run src/load_ibama.py
