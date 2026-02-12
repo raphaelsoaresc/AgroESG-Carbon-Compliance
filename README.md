@@ -12,7 +12,6 @@ Para emitir créditos de carbono de alta integridade, é necessário garantir qu
 
 O projeto segue uma abordagem **Híbrida (Local Stealth + Cloud Performance)**, utilizando Nix para infraestrutura imutável.
 
-```mermaid
 graph TD
     subgraph "Stealth Extraction (Local/Tor)"
         A[IBAMA/SIGEF Portal] -->|Anonymized Request| B(Tor Proxy :9050)
@@ -31,9 +30,9 @@ graph TD
 
     subgraph "Transformation (Cloud/dbt)"
         G --> H[dbt Core]
-        H --> I[Gold Tables (Compliance)]
+        H --> I[Gold Tables Compliance]
     end
-```
+
 
 * **Ingestão Resiliente (Airflow + Tor):** Extração anônima via rede Tor para evitar bloqueios de IP e *fingerprinting* TLS (`curl_cffi`).
 * **Pré-processamento (DuckDB):** Conversão local de CSVs gigantes para Parquet com tipagem forte e verificação de Hash (Idempotência).
