@@ -1,42 +1,39 @@
 # 🌿 AgroESG Carbon Compliance
 
-> **Status:** 🚧 Em Desenvolvimento (Migração para dbt em andamento)
+> **Status:** 🚀 Infraestrutura Operacional | 🚧 Refatoração (Migração de Scripts `src/` para Airflow)
 
-Este projeto é uma solução de **Engenharia de Analytics** focada em análise de risco e compliance ambiental para a originação de créditos de carbono. O objetivo é cruzar dados geoespaciais de propriedades rurais com listas de embargos ambientais (IBAMA) no estado de Mato Grosso, garantindo a elegibilidade ESG.
+Este projeto é uma solução de **Engenharia de Dados (ELT)** focada em análise de risco e compliance ambiental para a originação de créditos de carbono. O objetivo é cruzar dados geoespaciais de propriedades rurais com listas de embargos ambientais (IBAMA) e malhas fundiárias (SIGEF), garantindo a elegibilidade ESG através de uma arquitetura resiliente.
 
 ## 🎯 O Problema de Negócio
 
-Para emitir créditos de carbono de alta integridade, é necessário garantir que a área do projeto não possui sobreposição com áreas embargadas por desmatamento ou outras infrações ambientais. Este projeto automatiza a ingestão, limpeza e transformação desses dados para permitir auditorias rápidas.
+Para emitir créditos de carbono de alta integridade, é necessário garantir que a área do projeto não possui sobreposição com áreas embargadas. Porém, fontes governamentais são instáveis, mudam formatos sem aviso e bloqueiam requisições automatizadas. Este projeto cria um **"Bunker de Dados"** para garantir a ingestão contínua, mesmo em cenários hostis.
 
 ## 🏗 Arquitetura e Stack
 
-O projeto segue uma abordagem **Modern Data Stack**, utilizando contêineres e gerenciamento declarativo de ambiente.
+O projeto segue uma abordagem **Híbrida (Local Stealth + Cloud Performance)**, utilizando Nix para infraestrutura imutável.
 
-* **Ingestão & Transformação (Python/GeoPandas):** Extração de dados brutos do IBAMA (CSV), limpeza de geometrias (WKT) e carga no banco de dados.
-* **Data Warehouse (PostgreSQL + PostGIS):** Armazenamento de dados espaciais.
-* **Transformação (dbt Core):** Modelagem de dados, testes de qualidade e documentação (em implementação).
-* **Gerenciamento de Ambiente:** `devenv` (Nix) para isolamento do sistema e `uv` para dependências Python ultra-rápidas.
+* **Ingestão Resiliente (Airflow + Tor):** Extração anônima via rede Tor para evitar bloqueios de IP e *fingerprinting* TLS (`curl_cffi`).
+* **Pré-processamento (DuckDB):** Conversão local de CSVs gigantes para Parquet com tipagem forte e verificação de Hash (Idempotência).
+* **Data Warehouse (Google BigQuery):** Armazenamento escalável dos dados brutos e tratados.
+* **Transformação (dbt Core):** Modelagem de dados e regras de negócio executadas diretamente no BigQuery.
+* **Gerenciamento de Ambiente:** `devenv` (Nix) para orquestrar serviços (Tor, Postgres, Airflow) sem sujar o sistema operacional.
 
-## ⚙️ Funcionalidades Implementadas (ETL)
+## ⚙️ Funcionalidades Implementadas (Scripts `src/`)
 
-O pipeline atual de ingestão (`notebooks/01_etl...`) já realiza:
+A lógica atual reside em scripts Python robustos (`src/`) que estão sendo migrados para DAGs do Airflow:
 
-1.  **Tratamento Geoespacial:**
-    * Conversão de coordenadas (Latitude/Longitude) e geometrias WKT.
-    * Criação de *buffer* de 50 metros em pontos para transformar em polígonos.
-    * Reprojeção para SIRGAS 2000 / UTM 22S (EPSG:31982) para cálculos métricos precisos.
-    * Correção de geometrias inválidas (ex: *bowtie polygons*) antes da carga no PostGIS.
+1.  **Extração "Anti-Bloqueio" (IBAMA):**
+    *   Simulação de navegador real (Chrome) para bypass de firewall.
+    *   **Fallback Automático:** Se o site oficial cair, o sistema busca o backup mais recente no Google Cloud Storage para não quebrar o dashboard.
+    *   **Zero Desperdício:** Validação de ETag/Hash MD5 antes do processamento. Se o dado não mudou, o pipeline para.
 
-2.  **Regras de Compliance (Categorização):**
-    Classificação automática dos embargos com base na data da infração e código florestal:
-    * `active_enforcement`: Embargos recentes e ativos.
-    * `consolidated_area`: Áreas consolidadas (anteriores a 2008).
-    * `recent_violation`: Infrações nos últimos 5 anos.
-    * `insufficient_data`: Falta de dados históricos.
+2.  **Tratamento Geoespacial (SIGEF):**
+    *   Leitura de Shapefiles complexos e conversão para WKT (Well-Known Text).
+    *   Padronização de tipagem para garantir integridade na camada Raw do BigQuery.
 
 ## 🚀 Como Executar o Projeto
 
-Este projeto utiliza **Nix** e **Devenv** para garantir que você tenha todas as dependências (GDAL, GEOS, Python, PostGIS) sem sujar seu sistema operacional.
+Este projeto utiliza **Nix** e **Devenv**. Não é necessário instalar Python, GDAL ou Banco de Dados manualmente.
 
 ### Pré-requisitos
 * Instalar [Nix](https://nixos.org/download.html)
@@ -44,44 +41,40 @@ Este projeto utiliza **Nix** e **Devenv** para garantir que você tenha todas as
 
 ### Passo a Passo
 
-1.  **Inicie o ambiente e serviços (Banco de Dados):**
+1.  **Inicie a Infraestrutura (Tor + Postgres):**
     ```bash
     devenv up
     ```
-    *Isso iniciará o PostgreSQL com as extensões PostGIS automaticamente.*
+    *Isso iniciará o Proxy Tor (porta 9050) e o PostgreSQL em segundo plano.*
 
 2.  **Entre no shell de desenvolvimento:**
     ```bash
     devenv shell
     ```
+    *Na primeira execução, o Airflow será instalado e configurado automaticamente.*
 
-3.  **Instale/Sincronize as dependências Python:**
+3.  **Inicie o Orquestrador:**
     ```bash
-    uv sync
+    start-airflow
     ```
+    *Acesse `localhost:8080` com a senha gerada no terminal.*
 
-4.  **Execute o pipeline de carga (Exemplo):**
+4.  **Valide a Conexão Híbrida:**
     ```bash
-    # Executa o notebook de ingestão via linha de comando
-    jupyter execute notebooks/01_etl_ibama_embargos_mt_postgis.ipynb
+    check-connection
     ```
+    *Deve retornar um IP do Tor (Ingestão) e seu IP Real (Upload).*
 
-5.  **Rodar modelos dbt (Em construção):**
-    ```bash
-    cd agro_credit_transform
-    dbt debug
-    dbt run
-    ```
+## 🗺 Roadmap (Refatoração & Analytics)
 
-## 🗺 Roadmap (Migração para dbt)
+O foco atual é portar a inteligência dos scripts Python isolados para a estrutura gerenciável do Airflow:
 
-Como próximo passo na jornada de Analytics Engineering, a lógica complexa que hoje reside nos Notebooks Python será migrada para modelos SQL no dbt:
-
-* [ ] **Staging:** Criar `stg_ibama_embargos` (View materializada do Raw Data).
-* [ ] **Intermediate:** Mover a lógica de categorização (`compliance_status`) para SQL.
-* [ ] **Marts:** Criar tabela fato de análises de risco por município.
-* [ ] **Tests:** Implementar testes (ex: garantir que não existem geometrias nulas na tabela final).
+* [x] **Infraestrutura:** Ambiente Nix com Tor, Airflow e DuckDB configurados.
+* [ ] **Refatoração (Ingestão):** Converter `src/extract_load_ibama.py` para DAG do Airflow.
+* [ ] **Refatoração (Geo):** Converter `src/load_sigef_raw.py` para DAG do Airflow.
+* [ ] **Data Warehouse:** Configurar tabelas Raw no BigQuery.
+* [ ] **Transformação (dbt):** Criar modelos `stg` (limpeza) e `marts` (regras de compliance).
 
 ---
 **Autor:** Raphael Soares
-*Projeto desenvolvido para portfólio de Analytics Engineering.*
+*Projeto desenvolvido para portfólio de Data Engineering & Analytics.*
