@@ -1,4 +1,6 @@
-# === SEGURANÇA E CREDENCIAIS (CRÍTICO) ===
+# =======================================================
+# 1. SEGURANÇA E CREDENCIAIS (DO SEU ARQUIVO ORIGINAL)
+# =======================================================
 # Arquivo JSON da Service Account do BigQuery
 agroesg-carbon-compliance-f462eb0bb473.json
 *.json
@@ -9,14 +11,34 @@ profiles.yml
 user.yml
 .DS_Store
 
-# === dbt (ESSENCIAL) ===
+# =======================================================
+# 2. AIRFLOW (NOVO - CRÍTICO PARA O STANDALONE)
+# =======================================================
+# O banco de dados local muda a cada segundo, não deve subir
+airflow/airflow.db
+airflow/*.db
+# Logs de execução podem ficar gigantes
+airflow/logs/
+# Arquivos de processo (travas)
+airflow/*.pid
+airflow/*.err
+# Senha gerada automaticamente (SEGURANÇA MÁXIMA)
+airflow/standalone_admin_password.txt
+# Configurações web locais
+airflow/webserver_config.py
+
+# =======================================================
+# 3. dbt (DO SEU ARQUIVO ORIGINAL)
+# =======================================================
 target/
 dbt_packages/
 dbt_modules/
 logs/
 *.log
 
-# === DADOS E GIS (EVITAR SUBIR ARQUIVOS PESADOS) ===
+# =======================================================
+# 4. DADOS E GIS (DO SEU ARQUIVO ORIGINAL + PARQUET)
+# =======================================================
 # Ignora bases brutas do IBAMA/SIGEF e arquivos temporários de mapas
 *.csv
 *.shp
@@ -25,10 +47,15 @@ logs/
 *.prj
 *.cpg
 *.zip
+# Adicionado: O formato que o DuckDB vai gerar
+*.parquet
+*.gz
 data/raw/
 data/processed/
 
-# === PYTHON E AMBIENTES VIRTUAIS ===
+# =======================================================
+# 5. PYTHON E AMBIENTES VIRTUAIS (DO SEU ARQUIVO ORIGINAL)
+# =======================================================
 __pycache__/
 *.py[oc]
 build/
@@ -38,13 +65,17 @@ wheels/
 .venv
 venv/
 
-# === FERRAMENTAS E IDEs ===
+# =======================================================
+# 6. FERRAMENTAS E IDEs (DO SEU ARQUIVO ORIGINAL)
+# =======================================================
 .vscode/
 .idea/
 .ipynb_checkpoints
 .pre-commit-config.yaml
 
-# === DEVENV & DIRENV ===
+# =======================================================
+# 7. DEVENV & DIRENV (DO SEU ARQUIVO ORIGINAL)
+# =======================================================
 .devenv*
 devenv.local.nix
 devenv.local.yaml
