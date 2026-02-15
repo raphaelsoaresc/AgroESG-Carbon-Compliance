@@ -28,6 +28,7 @@ graph TD
         F -->|Deduplicação & Spatial Join| G[BigQuery Gold: Compliance]
     end
 
+
 ### 🛠️ Destaques de Engenharia de Dados
 
 *   **Idempotência Garantida:** Implementação de Hashing MD5 para cada arquivo processado. O pipeline utiliza nomes determinísticos no GCS para evitar lixo no storage e metadados de auditoria (`file_hash`, `ingested_at`) no BigQuery.
@@ -45,7 +46,7 @@ graph TD
 
 ## 🚀 Como Executar o Projeto
 
-Este projeto utiliza **Nix**. Não é necessário instalar Python ou Bancos de Dados manualmente.
+Este projeto utiliza **Nix**. Não é necessário instalar Python, Postgres ou dependências manualmente.
 
 ### Passo a Passo
 
@@ -53,17 +54,24 @@ Este projeto utiliza **Nix**. Não é necessário instalar Python ou Bancos de D
     ```bash
     devenv shell
     ```
-    *Isso configurará automaticamente o Python, UV, Postgres e as dependências do Airflow.*
+    *Isso prepara o ambiente isolado com Python, `uv`, Postgres e as dependências do Airflow.*
 
-2.  **Inicie o Orquestrador:**
+2.  **Ative os serviços de infraestrutura:**
+    ```bash
+    devenv up -d
+    ```
+    *Inicia o banco Postgres em segundo plano (essencial para o Metastore do Airflow).*
+
+3.  **Inicie o Orquestrador:**
     ```bash
     start-airflow
     ```
-    *Acesse `localhost:8080`. O usuário e senha padrão são `admin` / `admin`.*
+    *Acesse `localhost:8080`. Credenciais padrão: `admin` / `admin`.*
 
-3.  **Configuração de Conexões:**
-    *   Configure a conexão `fs_default` (tipo File) apontando para `/`.
-    *   Configure a conexão `google_cloud_default` com seu Service Account JSON.
+4.  **Configuração de Conexões (Airflow UI):**
+    *   **`fs_default`**: Tipo `File (path)`, aponte o `Extra` ou `Path` para a raiz do seu diretório de dados local.
+    *   **`google_cloud_default`**: Tipo `Google Cloud`, insira o JSON da sua Service Account para permissões no BigQuery e GCS.
+
 
 ## 🗺 Roadmap
 
