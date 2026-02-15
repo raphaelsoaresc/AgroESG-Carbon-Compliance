@@ -111,7 +111,7 @@ with DAG(
                     "tableId": TABLE_ID,
                 },
                 "sourceFormat": "PARQUET",
-                "writeDisposition": "WRITE_TRUNCATE",
+                "writeDisposition": "WRITE_APPEND",
                 "autodetect": True,
             }
         },
