@@ -1,102 +1,80 @@
 # 🌿 AgroESG Carbon Compliance
 
-> **Status:** 🚀 Infraestrutura Operacional | 🚧 Refatoração (Migração de Scripts `src/` para Airflow)
+> **Status:** 🚀 Ingestão (EL) Operacional | 🏗️ Transformação (dbt) em Desenvolvimento
 
-Este projeto é uma solução de **Engenharia de Dados (ELT)** focada em análise de risco e compliance ambiental para a originação de créditos de carbono. O objetivo é cruzar dados geoespaciais de propriedades rurais com listas de embargos ambientais (IBAMA) e malhas fundiárias (SIGEF), garantindo a elegibilidade ESG através de uma arquitetura resiliente.
+Este projeto é uma solução de **Engenharia de Dados (ELT)** focada em análise de risco e compliance ambiental para a originação de créditos de carbono. O objetivo é cruzar dados geoespaciais de propriedades rurais (SIGEF) com listas de embargos ambientais (IBAMA), garantindo a elegibilidade ESG através de uma arquitetura resiliente e idempotente.
 
 ## 🎯 O Problema de Negócio
 
-Para emitir créditos de carbono de alta integridade, é necessário garantir que a área do projeto não possui sobreposição com áreas embargadas. Porém, fontes governamentais são instáveis, mudam formatos sem aviso e bloqueiam requisições automatizadas. Este projeto cria um **"Bunker de Dados"** para garantir a ingestão contínua, mesmo em cenários hostis.
+Para emitir créditos de carbono de alta integridade, é necessário garantir que a área do projeto não possui sobreposição com áreas embargadas. O desafio reside na instabilidade das fontes governamentais e na complexidade dos dados geoespaciais. Este projeto implementa um pipeline que garante a **rastreabilidade histórica** e a **unicidade dos dados**, mesmo em casos de reprocessamento.
 
 ## 🏗 Arquitetura e Stack
 
-O projeto segue uma abordagem **Híbrida (Local Stealth + Cloud Performance)**, utilizando Nix para infraestrutura imutável.
+O projeto utiliza uma abordagem **Medallion Architecture** (Bronze, Silver, Gold) orquestrada por um ambiente imutável via Nix.
 
 graph TD
-    subgraph "Stealth Extraction (Local/Tor)"
-        A[IBAMA/SIGEF Portal] -->|Anonymized Request| B(Tor Proxy :9050)
-        B --> C[Airflow Scraper]
+    subgraph "Ingestão & Pré-Processamento (Local/DuckDB)"
+        A[Arquivos Brutos: SIGEF/IBAMA] --> B[DuckDB Spatial]
+        B -->|Hash MD5 & Parquet| C[Local Staging]
     end
     
-    subgraph "Pre-Processing (Local/DuckDB)"
-        C -->|Raw CSV| D[DuckDB In-Memory]
-        D -->|Parquet Conversion| E[Local Parquet]
-    end
-    
-    subgraph "Cloud Loading (Direct Connection)"
-        E -->|NO_PROXY Bypass| F[Google Cloud Storage]
-        F --> G[BigQuery Raw Tables]
+    subgraph "Cloud Storage (Bronze Layer)"
+        C -->|Upload Idempotente| D[Google Cloud Storage]
+        D -->|Write Append| E[BigQuery Raw Tables]
     end
 
-    subgraph "Transformation (Cloud/dbt)"
-        G --> H[dbt Core]
-        H --> I[Gold Tables Compliance]
+    subgraph "Transformação (Cloud/dbt)"
+        E --> F[dbt Core: Silver Layer]
+        F -->|Deduplicação & Spatial Join| G[BigQuery Gold: Compliance]
     end
 
+### 🛠️ Destaques de Engenharia de Dados
 
-* **Ingestão Resiliente (Airflow + Tor):** Extração anônima via rede Tor para evitar bloqueios de IP e *fingerprinting* TLS (`curl_cffi`).
-* **Pré-processamento (DuckDB):** Conversão local de CSVs gigantes para Parquet com tipagem forte e verificação de Hash (Idempotência).
-* **Data Warehouse (Google BigQuery):** Armazenamento escalável dos dados brutos e tratados.
-* **Transformação (dbt Core):** Modelagem de dados e regras de negócio executadas diretamente no BigQuery.
-* **Gerenciamento de Ambiente:** `devenv` (Nix) para orquestrar serviços (Tor, Postgres, Airflow) sem sujar o sistema operacional.
+*   **Idempotência Garantida:** Implementação de Hashing MD5 para cada arquivo processado. O pipeline utiliza nomes determinísticos no GCS para evitar lixo no storage e metadados de auditoria (`file_hash`, `ingested_at`) no BigQuery.
+*   **Processamento Espacial de Alta Performance:** Uso do **DuckDB** para leitura de Shapefiles complexos e conversão local para Parquet. A geometria é tratada via `ST_AsText` para garantir compatibilidade total com o BigQuery.
+*   **Resiliência no Airflow 2.10:** Superação de bugs de serialização de metadados (JSON/Pickle) através da implementação do `BigQueryInsertJobOperator`, garantindo uma comunicação robusta com a API de Jobs do Google Cloud.
+*   **Estratégia de Housekeeping:** Sistema automático de arquivamento de arquivos processados, prevenindo reprocessamentos infinitos e garantindo a limpeza do ambiente local.
 
-## ⚙️ Funcionalidades Implementadas (Scripts `src/`)
+## 🧰 Stack Técnica
 
-A lógica atual reside em scripts Python robustos (`src/`) que estão sendo migrados para DAGs do Airflow:
-
-1.  **Extração "Anti-Bloqueio" (IBAMA):**
-    *   Simulação de navegador real (Chrome) para bypass de firewall.
-    *   **Fallback Automático:** Se o site oficial cair, o sistema busca o backup mais recente no Google Cloud Storage para não quebrar o dashboard.
-    *   **Zero Desperdício:** Validação de ETag/Hash MD5 antes do processamento. Se o dado não mudou, o pipeline para.
-
-2.  **Tratamento Geoespacial (SIGEF):**
-    *   Leitura de Shapefiles complexos e conversão para WKT (Well-Known Text).
-    *   Padronização de tipagem para garantir integridade na camada Raw do BigQuery.
+*   **Orquestração:** Apache Airflow 2.10 (rodando com Postgres Backend e LocalExecutor).
+*   **Motor de Dados:** DuckDB (com extensões Spatial e HTTPFS).
+*   **Data Warehouse:** Google BigQuery & Cloud Storage.
+*   **Transformação:** dbt Core (em implementação).
+*   **Infraestrutura:** `devenv` (Nix) e `uv` para ambientes 100% reprodutíveis.
 
 ## 🚀 Como Executar o Projeto
 
-Este projeto utiliza **Nix** e **Devenv**. Não é necessário instalar Python, GDAL ou Banco de Dados manualmente.
-
-### Pré-requisitos
-* Instalar [Nix](https://nixos.org/download.html)
-* Instalar [Devenv](https://devenv.sh/getting-started/)
+Este projeto utiliza **Nix**. Não é necessário instalar Python ou Bancos de Dados manualmente.
 
 ### Passo a Passo
 
-1.  **Inicie a Infraestrutura (Tor + Postgres):**
-    ```bash
-    devenv up
-    ```
-    *Isso iniciará o Proxy Tor (porta 9050) e o PostgreSQL em segundo plano.*
-
-2.  **Entre no shell de desenvolvimento:**
+1.  **Entre no shell de desenvolvimento:**
     ```bash
     devenv shell
     ```
-    *Na primeira execução, o Airflow será instalado e configurado automaticamente.*
+    *Isso configurará automaticamente o Python, UV, Postgres e as dependências do Airflow.*
 
-3.  **Inicie o Orquestrador:**
+2.  **Inicie o Orquestrador:**
     ```bash
     start-airflow
     ```
-    *Acesse `localhost:8080` com a senha gerada no terminal.*
+    *Acesse `localhost:8080`. O usuário e senha padrão são `admin` / `admin`.*
 
-4.  **Valide a Conexão Híbrida:**
-    ```bash
-    check-connection
-    ```
-    *Deve retornar um IP do Tor (Ingestão) e seu IP Real (Upload).*
+3.  **Configuração de Conexões:**
+    *   Configure a conexão `fs_default` (tipo File) apontando para `/`.
+    *   Configure a conexão `google_cloud_default` com seu Service Account JSON.
 
-## 🗺 Roadmap (Refatoração & Analytics)
+## 🗺 Roadmap
 
-O foco atual é portar a inteligência dos scripts Python isolados para a estrutura gerenciável do Airflow:
-
-* [x] **Infraestrutura:** Ambiente Nix com Tor, Airflow e DuckDB configurados.
-* [ ] **Refatoração (Ingestão):** Converter `src/extract_load_ibama.py` para DAG do Airflow.
-* [ ] **Refatoração (Geo):** Converter `src/load_sigef_raw.py` para DAG do Airflow.
-* [ ] **Data Warehouse:** Configurar tabelas Raw no BigQuery.
-* [ ] **Transformação (dbt):** Criar modelos `stg` (limpeza) e `marts` (regras de compliance).
+* [x] **Infraestrutura:** Ambiente Nix com Postgres e Airflow configurados.
+* [x] **Ingestão SIGEF:** DAG idempotente com DuckDB Spatial e carga no BigQuery.
+* [x] **Ingestão IBAMA:** DAG resiliente com suporte a CSV/Shapefile e carga via BigQuery Jobs.
+* [ ] **Camada Silver (dbt):** Modelos de limpeza e deduplicação lógica (Last Record Wins).
+* [ ] **Camada Gold (dbt):** Implementação do Spatial Join para detecção de sobreposições.
+* [ ] **Dashboard:** Visualização de risco ESG no Looker Studio.
 
 ---
 **Autor:** Raphael Soares
+
 *Projeto desenvolvido para portfólio de Data Engineering & Analytics.*
