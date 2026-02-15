@@ -9,6 +9,7 @@ from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobO
 from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQueryOperator
 from airflow.operators.bash import BashOperator
 from airflow.sensors.filesystem import FileSensor
+import zipfile
 
 # --- CONFIGURAÇÕES ---
 PROJECT_ID = os.getenv("GCP_PROJECT_ID")
@@ -29,49 +30,89 @@ default_args = {
 }
 
 def process_ibama_file_with_duckdb(ti):
+    # 1. Busca o arquivo na pasta RAW
     files = [f for f in os.listdir(RAW_PATH) if f.endswith(('.csv', '.zip', '.shp'))]
     if not files:
         raise FileNotFoundError("Nenhum arquivo do IBAMA encontrado.")
     
-    file_name = files[0]
-    full_path = os.path.join(RAW_PATH, file_name)
+    original_filename = files[0]
+    full_path = os.path.join(RAW_PATH, original_filename)
     
+    # 2. Gera o Hash do arquivo ORIGINAL (seja ZIP, CSV ou SHP) para auditoria
     with open(full_path, "rb") as f:
         file_hash = hashlib.md5(f.read()).hexdigest()
     
+    # 3. Tratamento de ZIP (A correção do erro)
+    # Se for ZIP, extraímos para garantir que o DuckDB leia o arquivo real
+    working_path = full_path # Por padrão, o caminho de trabalho é o arquivo original
+    
+    if original_filename.endswith('.zip'):
+        print(f"Arquivo ZIP detectado: {original_filename}. Extraindo...")
+        with zipfile.ZipFile(full_path, 'r') as zip_ref:
+            zip_ref.extractall(RAW_PATH)
+            
+            # Procura o que foi extraído
+            extracted_files = zip_ref.namelist()
+            
+            # Tenta achar um CSV
+            csvs = [f for f in extracted_files if f.endswith('.csv')]
+            # Tenta achar um SHP
+            shps = [f for f in extracted_files if f.endswith('.shp')]
+            
+            if csvs:
+                working_path = os.path.join(RAW_PATH, csvs[0])
+                print(f"CSV extraído e selecionado: {working_path}")
+            elif shps:
+                working_path = os.path.join(RAW_PATH, shps[0])
+                print(f"Shapefile extraído e selecionado: {working_path}")
+            else:
+                raise ValueError(f"O ZIP {original_filename} não contém CSV nem SHP válidos.")
+
+    # 4. Definição do Arquivo de Saída
     output_filename = f"ibama_{file_hash}.parquet"
     output_path = os.path.join(STAGING_PATH, output_filename)
     
     con = duckdb.connect(database=':memory:')
     
-    if file_name.endswith('.csv') or (file_name.endswith('.zip') and 'ibama' in file_name.lower()):
-        read_cmd = f"""read_csv_auto('{full_path}', 
+    # 5. Lógica de Leitura (Preservando o que funcionou no teste local)
+    # Verifica a extensão do arquivo DE TRABALHO (já extraído), não do original
+    if working_path.endswith('.csv'):
+        # ATUALIZAÇÃO CRÍTICA:
+        # 1. QUOTE='"': Diz pro DuckDB que o ; dentro de aspas é texto, não coluna.
+        # 2. IGNORE_ERRORS=TRUE: Se tiver uma linha podre, ele ignora e segue a vida (essencial para Bronze).
+        read_cmd = f"""read_csv_auto('{working_path}', 
                         ALL_VARCHAR=TRUE, 
                         HEADER=TRUE,
-                        STRICT_MODE=FALSE,
+                        NORMALIZE_NAMES=TRUE,
+                        QUOTE='"',
                         IGNORE_ERRORS=TRUE)"""
         select_clause = "*"
     else:
-        # Mantemos o ST_AsText para Shapefiles (SIGEF/IBAMA Geo)
+        # LÓGICA PRESERVADA PARA SHAPEFILES (Não mexi aqui):
         con.execute("INSTALL spatial; LOAD spatial;")
-        read_cmd = f"st_read('{full_path}')"
+        read_cmd = f"st_read('{working_path}')"
         select_clause = "* EXCLUDE (geom), ST_AsText(geom) as geom"
 
+    # 6. Execução da Query
     query = f"""
         COPY (
             SELECT 
                 {select_clause},
                 '{file_hash}' as file_hash,
-                '{file_name}' as source_filename,
+                '{original_filename}' as source_filename,
                 now() as ingested_at
             FROM {read_cmd}
         ) TO '{output_path}' (FORMAT 'PARQUET');
     """
+    
+    print(f"Executando no DuckDB: {query}")
     con.execute(query)
     con.close()
     
+    # 7. Retorno para o Airflow
     ti.xcom_push(key='output_filename', value=output_filename)
-    ti.xcom_push(key='original_file', value=file_name)
+    # Importante: Passamos o arquivo ORIGINAL para o BashOperator mover para archive
+    ti.xcom_push(key='original_file', value=original_filename)
 
 with DAG(
     'ingestion_ibama_to_bronze',
