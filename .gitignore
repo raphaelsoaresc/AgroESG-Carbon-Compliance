@@ -51,8 +51,9 @@ logs/
 *.parquet
 *.gz
 data/raw/
+data/staging/
+data/archive/
 data/processed/
-
 # =======================================================
 # 5. PYTHON E AMBIENTES VIRTUAIS (DO SEU ARQUIVO ORIGINAL)
 # =======================================================
