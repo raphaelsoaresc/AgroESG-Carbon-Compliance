@@ -17,11 +17,12 @@ dependencies = [
     
     # --- Transformation (A "Inteligência") ---
     "dbt-bigquery>=1.7.0",                      
-    "astronomer-cosmos>=1.2.0",                 
+    "astronomer-cosmos[google]>=1.2.0",             
     
     # --- Utils Essenciais ---
     "python-dotenv>=1.0.0",                     
-    "pandas>=2.0.0",                            
+    "pandas>=2.0.0",
+    "snowplow-tracker<1.0.0",                            
 ]
 
 [tool.uv]
