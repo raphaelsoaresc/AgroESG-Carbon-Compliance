@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: raw_data  # Nome interno que usaremos no dbt
+    project: "{{ env_var('GCP_PROJECT_ID') }}" # Pega do .env
+    dataset: agro_esg_raw # O dataset que as DAGs populam
+    
+    tables:
+      - name: sigef_history
+        description: "Dados brutos das propriedades rurais vindos do SIGEF."
+        columns:
+          - name: file_hash
+            description: "Hash MD5 do arquivo original para controle de idempotência."
+
+      - name: ibama_history
+        description: "Lista bruta de áreas embargadas pelo IBAMA."
+        columns:
+          - name: file_hash
+            description: "Hash MD5 do arquivo original para controle de idempotência."
