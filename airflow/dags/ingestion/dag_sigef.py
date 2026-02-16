@@ -102,7 +102,7 @@ def process_geo_file_with_duckdb(ti):
 with DAG(
     'ingestion_sigef_to_bronze', 
     default_args=default_args,
-    schedule_interval="* * * * *",
+    schedule_interval=None,
     max_active_runs=1,
     catchup=False,
     is_paused_upon_creation=False,
@@ -128,7 +128,9 @@ with DAG(
         src=os.path.join(STAGING_PATH, "{{ ti.xcom_pull(task_ids='process_with_duckdb', key='output_filename') }}"),
         dst="bronze/sigef/{{ ti.xcom_pull(task_ids='process_with_duckdb', key='output_filename') }}",
         bucket=BUCKET_NAME,
-        gcp_conn_id='google_cloud_default'
+        gcp_conn_id='google_cloud_default',
+        execution_timeout=timedelta(minutes=10),
+        mime_type='application/octet-stream'
     )
 
     load_to_bq = BigQueryInsertJobOperator(
