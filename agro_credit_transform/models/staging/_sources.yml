@@ -1,8 +1,0 @@
-version: 2
-
-sources:
-  - name: public  # Nome do schema no banco de dados
-    description: "Dados brutos carregados via script de ingestão"
-    tables:
-      - name: ibama_embargos  # Nome exato da tabela no banco
-      - name: Sigef_Brasil_MT  # Nome exato da tabela correspondente
