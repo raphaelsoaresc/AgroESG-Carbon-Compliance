@@ -11,9 +11,6 @@ WITH staging_data AS (
 spatial_cleaning AS (
     SELECT
         * EXCEPT(geometry_wkt),
-        -- Aplica a limpeza validada no console:
-        -- 1. Remove o prefixo ' Z '
-        -- 2. Remove a terceira coordenada (altitude) usando Regex
         REGEXP_REPLACE(
             REPLACE(UPPER(geometry_wkt), ' Z ', ' '),
             r' [0-9.-]+([,)])',
@@ -25,10 +22,23 @@ spatial_cleaning AS (
 spatial_processing AS (
     SELECT
         * EXCEPT(clean_wkt),
-        -- Converte para GEOGRAPHY com correção automática de topologia
+        -- O BigQuery já valida aqui com o parâmetro make_valid => TRUE
         SAFE.ST_GEOGFROMTEXT(clean_wkt, make_valid => TRUE) as geometry
     FROM spatial_cleaning
+),
+
+final_cleaning AS (
+    SELECT 
+        * EXCEPT(geometry),
+        geometry,
+        -- Já entrega a versão simplificada para o Mart não ter trabalho
+        ST_SIMPLIFY(geometry, 20) as geom_calc,
+        -- Garante unicidade por ID
+        ROW_NUMBER() OVER(PARTITION BY property_id ORDER BY ingested_at DESC) as rn
+    FROM spatial_processing
+    WHERE geometry IS NOT NULL
 )
 
-SELECT * FROM spatial_processing
-WHERE geometry IS NOT NULL
+SELECT * EXCEPT(rn) 
+FROM final_cleaning 
+WHERE rn = 1
