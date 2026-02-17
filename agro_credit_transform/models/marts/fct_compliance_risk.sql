@@ -13,6 +13,7 @@ WITH sigef AS (
         geom_calc,     
         SAFE_DIVIDE(ST_AREA(geometry), 10000) as property_area_ha
     FROM {{ ref('int_sigef_geometries') }}
+    WHERE property_id IS NOT NULL -- <--- ADICIONE ESTA LINHA AQUI
 ),
 
 -- 2. UNIÃO DOS CONTEXTOS (BIOMA + EMBARGO)

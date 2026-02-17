@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: fct_compliance_risk
+    description: "Mart final de conformidade socioambiental para propriedades rurais no MT."
+    
+    # 1. TESTES DE NÍVEL DE MODELO (Cruzamento de colunas)
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "NOT (eligibility_status = 'ELIGIBLE' AND embargo_overlap_ha > 0.001)"
+          name: "check_eligible_properties_overlap_limit"
+
+    columns:
+      # 2. TESTES DE NÍVEL DE COLUNA
+      - name: property_alias
+        description: "ID anonimizado da propriedade."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: eligibility_status
+        description: "Status final de elegibilidade após regras de bioma, embargo e contaminação."
+        data_tests:
+          - accepted_values:
+              values: [
+                'ELIGIBLE', 
+                'ELIGIBLE - NEGLIGIBLE OVERLAP', 
+                'ELIGIBLE W/ MONITORING (CONSOLIDATED)',
+                'NOT ELIGIBLE - CRITICAL AMAZON VIOLATION',
+                'NOT ELIGIBLE - POST-2008 VIOLATION',
+                'NOT ELIGIBLE - RISK BY OVERLAP (CONTAMINATION)',
+                'UNDER ANALYSIS'
+              ]
+
+      - name: property_area_ha
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
+      - name: embargo_overlap_ha
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
