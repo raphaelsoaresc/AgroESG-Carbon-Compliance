@@ -4,61 +4,49 @@
 
 Este projeto é uma solução de **Analytics Engineering & Data Engineering** focada na validação de critérios ESG para originação de créditos de carbono. A arquitetura evoluiu de um pipeline de extração simples para um ecossistema robusto que traduz o **Código Florestal Brasileiro** em regras de dados auditáveis.
 
-## 🏗 Arquitetura e Stack
+## 🎯 O Problema de Negócio
 
-O projeto utiliza uma abordagem **Medallion Architecture** (Bronze, Silver, Gold) orquestrada por um ambiente imutável.
+Para garantir a integridade de créditos de carbono, é necessário auditar:
+1.  **Sobreposição com Embargos:** A propriedade invade áreas embargadas pelo IBAMA?
+2.  **Marco Temporal:** A infração ocorreu antes ou depois de julho de 2008?
+3.  **Regras de Bioma:** A propriedade respeita a reserva legal específica do bioma (ex: 80% na Amazônia)?
+4.  **Risco de Contaminação:** A propriedade é vizinha imediata de uma área desmatada?
 
-    graph TD
-        subgraph "Camada Bronze (Ingestão)"
-            A[Fontes: SIGEF & IBAMA] -->|DuckDB Spatial| B[Parquet Files / GCS]
-        end
+## 🏗 Arquitetura e Fluxo de Dados
 
-        subgraph "Orquestração Dinâmica (Astronomer Cosmos)"
-            B --> C{Airflow DAG}
-            C -->|Renderiza| D[dbt Core Models]
-        end
+O projeto utiliza a **Medallion Architecture** (Bronze, Silver, Gold) para garantir a qualidade do dado:
 
-        subgraph "Transformação & Inteligência (Silver/Gold)"
-            D --> E[Limpeza & Padronização]
-            E --> F[Geospatial Joins (BigQuery Geo)]
-            F --> G[Regras de Negócio: Marco Temporal & Biomas]
-            G --> H[Cálculo de Risco por Contaminação]
-        end
-
-        H --> I[Tabela Final: Compliance Risk]
+*   **1. Camada Bronze (Ingestão):** Extração das fontes SIGEF e IBAMA via **DuckDB Spatial**, convertendo dados brutos para **Parquet** e armazenando no Google Cloud Storage.
+*   **2. Orquestração (Airflow + Cosmos):** O **Astronomer Cosmos** mapeia o projeto dbt e gera as tarefas no Airflow automaticamente, garantindo a linhagem.
+*   **3. Camada Silver (Transformação):** Limpeza, padronização e deduplicação lógica (*Last Record Wins*) via **dbt**.
+*   **4. Camada Gold (Inteligência):** Processamento geoespacial no **BigQuery** para Joins espaciais, aplicação do Marco Temporal e cálculo de risco de contaminação.
 
 ---
 
 # 🚀 Diferenciais de Engenharia
 
 ### 1. Ingestão de Alta Performance (DuckDB + Parquet)
-Em vez de carregar dados brutos diretamente no Data Warehouse, o pipeline utiliza o **DuckDB** com a extensão `spatial` para realizar o *pre-processing* local. Ele converte Shapefiles e CSVs massivos em arquivos **Parquet** altamente compactados e tipados. Isso reduz o volume de dados trafegados para o Cloud Storage e acelera drasticamente a carga no BigQuery.
+O pipeline utiliza o **DuckDB** com a extensão `spatial` para realizar o *pre-processing* local. Ele converte Shapefiles e CSVs massivos em arquivos **Parquet** compactados. Isso reduz o volume de dados trafegados e acelera a carga no Data Warehouse.
 
 ### 2. Ambiente Hermético (Nix & uv)
-Ao contrário do padrão venv, o projeto utiliza **Nix** para gerenciar dependências a nível de sistema operacional (como as bibliotecas C++ do **GDAL/GEOS** necessárias para geoespacial). Combinado com o **uv**, isso garante um ambiente 100% reprodutível e imutável, eliminando o clássico "funciona na minha máquina".
+O projeto utiliza **Nix** para gerenciar dependências a nível de sistema operacional (como as bibliotecas C++ do **GDAL/GEOS**). Combinado com o **uv**, isso garante um ambiente 100% reprodutível e imutável, eliminando o erro "funciona na minha máquina".
 
 ### 3. Estratégia ELT Geoespacial (Push-down Computation)
-Em vez de processar geometrias pesadas em Python (Pandas/Geopandas), o pipeline delega o processamento para o **BigQuery**. O dbt materializa as transformações dentro do Data Warehouse, permitindo escalar de milhares para milhões de polígonos sem estourar memória RAM, aproveitando a computação distribuída da nuvem.
+Em vez de processar geometrias pesadas em Python, o pipeline delega o processamento para o **BigQuery**. O dbt materializa as transformações dentro do Data Warehouse, permitindo escalar para milhões de polígonos aproveitando a computação distribuída.
 
 ### 4. Defensive Coding em SQL
-Implementação de tratamentos robustos para geometrias inválidas. O uso de funções como `SAFE.ST_GEOGFROMTEXT` e filtros de `SAFE_DIVIDE` nos modelos stg e int impede que uma única geometria corrompida no SIGEF/IBAMA derrube o pipeline inteiro, garantindo resiliência operacional.
+Implementação de tratamentos robustos para geometrias inválidas via `SAFE.ST_GEOGFROMTEXT` e filtros de `SAFE_DIVIDE`. Isso impede que uma única geometria corrompida derrube o pipeline inteiro, garantindo resiliência operacional.
 
 ### 5. Orquestração Atômica (Cosmos)
-A integração via **Astronomer Cosmos** permite que cada modelo dbt (stg, int, marts) seja tratado como uma tarefa individual no Airflow. Isso oferece observabilidade granular: se o cálculo de risco falhar, o Airflow aponta exatamente qual modelo quebrou e permite reexecutar apenas aquela parte (**retries parciais**), sem reprocessar a ingestão bruta.
+A integração via **Astronomer Cosmos** permite que cada modelo dbt seja uma tarefa individual no Airflow. Isso oferece observabilidade granular: se o cálculo de risco falhar, o Airflow permite reexecutar apenas aquela parte (**retries parciais**).
 
 ---
 
 # 🧠 Lógica de Compliance (Geospatial Intelligence)
 
-O coração do projeto reside nas regras de negócio codificadas em SQL via **dbt**:
-
-*   **Classificação de Biomas (IBGE):** Cruzamento espacial para determinar se a propriedade incide na Amazônia Legal, Cerrado ou Mata Atlântica.
-*   **Veredito do Marco Temporal:**
-    *   *Infrações pós-2008 na Amazônia:* Risco Crítico (Bloqueio Total).
-    *   *Infrações pré-2008:* Elegível sob Monitoramento (conforme legislação vigente).
-*   **Risco por Contaminação (Adjacency Risk):**
-    *   O sistema identifica polígonos elegíveis que tocam áreas embargadas.
-    *   Isso previne o "vazamento" de commodities de áreas irregulares para áreas certificadas.
+*   **Classificação de Biomas (IBGE):** Cruzamento espacial para determinar incidência na Amazônia Legal, Cerrado ou Mata Atlântica.
+*   **Veredito do Marco Temporal:** Bloqueio total para infrações pós-2008 na Amazônia e monitoramento para infrações anteriores.
+*   **Risco por Contaminação (Adjacency Risk):** Identificação de polígonos que tocam áreas embargadas, prevenindo a "lavagem" de commodities irregulares.
 
 ---
 
@@ -67,14 +55,12 @@ O coração do projeto reside nas regras de negócio codificadas em SQL via **db
 *   **Ingestão:** DuckDB (Spatial Extension) + Python.
 *   **Orquestração:** Apache Airflow 2.10 + Astronomer Cosmos.
 *   **Transformação:** dbt Core (BigQuery Adapter).
-*   **Data Lakehouse:** Google BigQuery & Cloud Storage (Parquet format).
+*   **Data Lakehouse:** Google BigQuery & Cloud Storage.
 *   **Ambiente:** Gerenciado via `devenv` (Nix) e `uv`.
 
 ---
 
 # 🚀 Como Executar o Projeto
-
-O ambiente é gerenciado via **Nix**, dispensando instalações manuais complexas.
 
 ### 1. Prepare o Ambiente
 ```bash
@@ -88,7 +74,6 @@ start-airflow
 ```
 
 ### 3. Documentação e Linhagem
-Para visualizar a linhagem dos dados e as regras aplicadas:
 ```bash
 dbt docs generate && dbt docs serve
 ```
@@ -98,10 +83,10 @@ dbt docs generate && dbt docs serve
 # 🗺 Roadmap Atualizado
 
 * [x] **Infraestrutura:** Ambiente Nix com Postgres e Airflow configurados via `devenv`.
-* [x] **Camada Bronze (Ingestão):** Pipelines DuckDB convertendo dados brutos (SIGEF/IBAMA) para Parquet e enviando ao GCS.
-* [x] **Camada Silver (dbt):** Modelos de limpeza e deduplicação lógica (*Last Record Wins*).
+* [x] **Camada Bronze (Ingestão):** Pipelines DuckDB convertendo dados brutos para Parquet e enviando ao GCS.
+* [x] **Camada Silver (dbt):** Modelos de limpeza e deduplicação lógica.
 * [x] **Camada Gold (dbt):** Implementação do Spatial Join e regras de Marco Temporal.
-* [ ] **Front-end:** Desenvolvimento de interface visual para exibir o mapa de risco (Streamlit).
+* [ ] **Front-end:** Interface visual para exibir o mapa de risco (Streamlit).
 * [ ] **API:** Expor os resultados de compliance via REST API.
 
 ---
