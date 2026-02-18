@@ -1,88 +1,102 @@
 # 🌿 AgroESG Carbon Compliance
 
-> **Status:** 🚀 Ingestão (EL) Operacional | 🏗️ Transformação (dbt) em Desenvolvimento
+> **Status:** ✅ Orquestração (Cosmos) Ativa | 🧠 Motor de Compliance Operacional | 🚧 Visualização (Front-end) em Breve
 
-Este projeto é uma solução de **Engenharia de Dados (ELT)** focada em análise de risco e compliance ambiental para a originação de créditos de carbono. O objetivo é cruzar dados geoespaciais de propriedades rurais (SIGEF) com listas de embargos ambientais (IBAMA), garantindo a elegibilidade ESG através de uma arquitetura resiliente e idempotente.
-
-## 🎯 O Problema de Negócio
-
-Para emitir créditos de carbono de alta integridade, é necessário garantir que a área do projeto não possui sobreposição com áreas embargadas. O desafio reside na instabilidade das fontes governamentais e na complexidade dos dados geoespaciais. Este projeto implementa um pipeline que garante a **rastreabilidade histórica** e a **unicidade dos dados**, mesmo em casos de reprocessamento.
+Este projeto é uma solução de **Analytics Engineering & Data Engineering** focada na validação de critérios ESG para originação de créditos de carbono. A arquitetura evoluiu de um pipeline de extração simples para um ecossistema robusto que traduz o **Código Florestal Brasileiro** em regras de dados auditáveis.
 
 ## 🏗 Arquitetura e Stack
 
-O projeto utiliza uma abordagem **Medallion Architecture** (Bronze, Silver, Gold) orquestrada por um ambiente imutável via Nix.
+O projeto utiliza uma abordagem **Medallion Architecture** (Bronze, Silver, Gold) orquestrada por um ambiente imutável.
 
-graph TD
-    subgraph "Ingestão & Pré-Processamento (Local/DuckDB)"
-        A[Arquivos Brutos: SIGEF/IBAMA] --> B[DuckDB Spatial]
-        B -->|Hash MD5 & Parquet| C[Local Staging]
-    end
-    
-    subgraph "Cloud Storage (Bronze Layer)"
-        C -->|Upload Idempotente| D[Google Cloud Storage]
-        D -->|Write Append| E[BigQuery Raw Tables]
-    end
+    graph TD
+        subgraph "Ingestão (Bronze)"
+            A[Fontes: SIGEF & IBAMA] -->|DuckDB Spatial| B[Parquet Files / GCS]
+        end
 
-    subgraph "Transformação (Cloud/dbt)"
-        E --> F[dbt Core: Silver Layer]
-        F -->|Deduplicação & Spatial Join| G[BigQuery Gold: Compliance]
-    end
+        subgraph "Orquestração Dinâmica (Astronomer Cosmos)"
+            B --> C{Airflow DAG}
+            C -->|Renderiza| D[dbt Core Models]
+        end
 
+        subgraph "Transformação & Inteligência (Silver/Gold)"
+            D --> E[Limpeza & Padronização]
+            E --> F[Geospatial Joins (BigQuery Geo)]
+            F --> G[Regras de Negócio: Marco Temporal & Biomas]
+            G --> H[Cálculo de Risco por Contaminação]
+        end
 
-### 🛠️ Destaques de Engenharia de Dados
+        H --> I[Tabela Final: Compliance Risk]
 
-*   **Idempotência Garantida:** Implementação de Hashing MD5 para cada arquivo processado. O pipeline utiliza nomes determinísticos no GCS para evitar lixo no storage e metadados de auditoria (`file_hash`, `ingested_at`) no BigQuery.
-*   **Processamento Espacial de Alta Performance:** Uso do **DuckDB** para leitura de Shapefiles complexos e conversão local para Parquet. A geometria é tratada via `ST_AsText` para garantir compatibilidade total com o BigQuery.
-*   **Resiliência no Airflow 2.10:** Superação de bugs de serialização de metadados (JSON/Pickle) através da implementação do `BigQueryInsertJobOperator`, garantindo uma comunicação robusta com a API de Jobs do Google Cloud.
-*   **Estratégia de Housekeeping:** Sistema automático de arquivamento de arquivos processados, prevenindo reprocessamentos infinitos e garantindo a limpeza do ambiente local.
+---
 
-## 🧰 Stack Técnica
+# 🚀 Diferenciais de Engenharia
 
-*   **Orquestração:** Apache Airflow 2.10 (rodando com Postgres Backend e LocalExecutor).
-*   **Motor de Dados:** DuckDB (com extensões Spatial e HTTPFS).
-*   **Data Warehouse:** Google BigQuery & Cloud Storage.
-*   **Transformação:** dbt Core (em implementação).
-*   **Infraestrutura:** `devenv` (Nix) e `uv` para ambientes 100% reprodutíveis.
+### 1. Ingestão de Alta Performance (DuckDB + Parquet)
+Em vez de carregar dados brutos diretamente no Data Warehouse, o pipeline utiliza o **DuckDB** com a extensão `spatial` para realizar o *pre-processing* local. Ele converte Shapefiles e CSVs massivos em arquivos **Parquet** altamente compactados e tipados. Isso reduz o volume de dados trafegados para o Cloud Storage e acelera drasticamente a carga no BigQuery.
 
-## 🚀 Como Executar o Projeto
+### 2. Ambiente Hermético (Nix & uv)
+O projeto utiliza **Nix** para gerenciar dependências a nível de sistema operacional (como as bibliotecas C++ do **GDAL/GEOS**). Combinado com o **uv**, isso garante um ambiente 100% reprodutível, eliminando o clássico "funciona na minha máquina".
 
-Este projeto utiliza **Nix**. Não é necessário instalar Python, Postgres ou dependências manualmente.
+### 3. Estratégia ELT Geoespacial (Push-down Computation)
+O pipeline delega o processamento de geometrias pesadas para o **BigQuery**. O dbt materializa as transformações dentro do Data Warehouse, permitindo escalar de milhares para milhões de polígonos sem estourar memória RAM, aproveitando a computação distribuída da nuvem.
 
-### Passo a Passo
+### 4. Defensive Coding em SQL
+Implementação de tratamentos robustos para geometrias inválidas via `SAFE.ST_GEOGFROMTEXT` e filtros de `SAFE_DIVIDE`. Isso impede que uma única geometria corrompida no SIGEF/IBAMA derrube o pipeline inteiro, garantindo resiliência operacional.
 
-1.  **Entre no shell de desenvolvimento:**
-    ```bash
-    devenv shell
-    ```
-    *Isso prepara o ambiente isolado com Python, `uv`, Postgres e as dependências do Airflow.*
+### 5. Orquestração Atômica (Cosmos)
+A integração via **Astronomer Cosmos** permite que cada modelo dbt seja tratado como uma tarefa individual no Airflow. Isso oferece observabilidade granular: se o cálculo de risco falhar, o Airflow permite reexecutar apenas aquela parte (**retries parciais**), sem reprocessar a ingestão bruta.
 
-2.  **Ative os serviços de infraestrutura:**
-    ```bash
-    devenv up -d
-    ```
-    *Inicia o banco Postgres em segundo plano (essencial para o Metastore do Airflow).*
+---
 
-3.  **Inicie o Orquestrador:**
-    ```bash
-    start-airflow
-    ```
-    *Acesse `localhost:8080`. Credenciais padrão: `admin` / `admin`.*
+# 🧠 Lógica de Compliance (Geospatial Intelligence)
 
-4.  **Configuração de Conexões (Airflow UI):**
-    *   **`fs_default`**: Tipo `File (path)`, aponte o `Extra` ou `Path` para a raiz do seu diretório de dados local.
-    *   **`google_cloud_default`**: Tipo `Google Cloud`, insira o JSON da sua Service Account para permissões no BigQuery e GCS.
+O coração do projeto reside nas regras de negócio codificadas em SQL via **dbt**:
 
+*   **Classificação de Biomas (IBGE):** Cruzamento espacial para determinar se a propriedade incide na Amazônia Legal, Cerrado ou Mata Atlântica.
+*   **Veredito do Marco Temporal:** Bloqueio total para infrações pós-2008 na Amazônia e monitoramento para infrações anteriores.
+*   **Risco por Contaminação (Adjacency Risk):** Identificação de polígonos elegíveis que tocam áreas embargadas, prevenindo a "lavagem" de commodities irregulares.
 
-## 🗺 Roadmap
+---
+
+# 🧰 Stack Técnica
+
+*   **Ingestão:** DuckDB (Spatial Extension) + Python.
+*   **Orquestração:** Apache Airflow 2.10 + Astronomer Cosmos.
+*   **Transformação:** dbt Core (BigQuery Adapter).
+*   **Data Lakehouse:** Google BigQuery & Cloud Storage (Parquet format).
+*   **Ambiente:** Gerenciado via `devenv` (Nix) para isolamento total.
+
+---
+
+# 🚀 Como Executar o Projeto
+
+### 1. Prepare o Ambiente
+```bash
+devenv shell
+devenv up -d  # Inicia serviços locais
+```
+
+### 2. Inicialize o Airflow
+```bash
+start-airflow
+```
+
+### 3. Documentação e Linhagem
+```bash
+dbt docs generate && dbt docs serve
+```
+
+---
+
+# 🗺 Roadmap Atualizado
 
 * [x] **Infraestrutura:** Ambiente Nix com Postgres e Airflow configurados.
-* [x] **Ingestão SIGEF:** DAG idempotente com DuckDB Spatial e carga no BigQuery.
-* [x] **Ingestão IBAMA:** DAG resiliente com suporte a CSV/Shapefile e carga via BigQuery Jobs.
-* [ ] **Camada Silver (dbt):** Modelos de limpeza e deduplicação lógica (Last Record Wins).
-* [ ] **Camada Gold (dbt):** Implementação do Spatial Join para detecção de sobreposições.
-* [ ] **Dashboard:** Visualização de risco ESG no Looker Studio.
+* [x] **Ingestão SIGEF:** Pipeline DuckDB convertendo dados brutos para Parquet e enviando ao GCS.
+* [x] **Ingestão IBAMA:** Carga resiliente de Shapefiles via DuckDB Spatial.
+* [x] **Camada Silver (dbt):** Modelos de limpeza e deduplicação lógica (*Last Record Wins*).
+* [x] **Camada Gold (dbt):** Implementação do Spatial Join e regras de Marco Temporal.
+* [ ] **Front-end:** Interface visual para exibir o mapa de risco (Streamlit).
+* [ ] **API:** Expor os resultados de compliance via REST API.
 
 ---
 **Autor:** Raphael Soares
-
-*Projeto desenvolvido para portfólio de Data Engineering & Analytics.*
