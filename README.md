@@ -44,7 +44,7 @@ A integração via **Astronomer Cosmos** permite que cada modelo dbt seja uma ta
 
 # 🧠 Lógica de Compliance (Geospatial Intelligence)
 
-*   **Classificação de Biomas (IBGE):** Cruzamento espacial para determinar incidência na Amazônia Legal, Cerrado ou Mata Atlântica.
+*   **Classificação de Biomas (IBGE):** Cruzamento espacial para determinar incidência na Amazônia Legal, Cerrado ou Pantanal.
 *   **Veredito do Marco Temporal:** Bloqueio total para infrações pós-2008 na Amazônia e monitoramento para infrações anteriores.
 *   **Risco por Contaminação (Adjacency Risk):** Identificação de polígonos que tocam áreas embargadas, prevenindo a "lavagem" de commodities irregulares.
 
