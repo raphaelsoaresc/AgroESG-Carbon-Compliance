@@ -1,0 +1,24 @@
+cat > .gcloudignore <<EOF
+.git
+.gitignore
+README.md
+.devenv/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+target/
+dbt_packages/
+logs/
+data/
+legacy/
+notebooks/
+airflow/
+tests/
+*.ctl
+*.sock
+*.pid
+EOF

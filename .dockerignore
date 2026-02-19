@@ -1,0 +1,11 @@
+.git
+.devenv
+.venv
+.env
+__pycache__
+target/
+dbt_packages/
+logs/
+data/
+legacy/
+notebooks/
