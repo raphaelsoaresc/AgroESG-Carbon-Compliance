@@ -6,23 +6,26 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     # --- Core Engine (O "Motor" do ELT) ---
-    "apache-airflow[google,postgres]==2.10.0", 
+    "apache-airflow[google,postgres]==2.10.0",
     "psycopg2-binary>=2.9.0",                   # Essencial para conectar no Postgres do Nix
-    "duckdb>=1.0.0",                            
-    "pyarrow>=15.0.0",                          
-    
+    "duckdb>=1.0.0",
+    "pyarrow>=15.0.0",
     # --- Cloud & Storage (A "Infra") ---
-    "google-cloud-storage",                     
-    "google-cloud-bigquery",                    
-    
+    "google-cloud-storage",
+    "google-cloud-bigquery",
     # --- Transformation (A "Inteligência") ---
-    "dbt-bigquery>=1.7.0",                      
-    "astronomer-cosmos[google]>=1.2.0",             
-    
+    "dbt-bigquery>=1.7.0",
+    "astronomer-cosmos[google]>=1.2.0",
     # --- Utils Essenciais ---
-    "python-dotenv>=1.0.0",                     
+    "python-dotenv>=1.0.0",
     "pandas>=2.0.0",
-    "snowplow-tracker<1.0.0",                            
+    "snowplow-tracker<1.0.0",
+    "streamlit>=1.54.0",
+    "plotly>=6.5.2",
+    "folium>=0.20.0",
+    "streamlit-folium>=0.26.1",
+    "db-dtypes>=1.5.0",
+    "pydeck>=0.9.1",
 ]
 
 [tool.uv]
