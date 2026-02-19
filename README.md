@@ -86,17 +86,17 @@ streamlit run app.py
 
 ---
 
-# 🗺 Roadmap Atualizado
+# 🗺 Roadmap
 
 * [x] **Infraestrutura:** Ambiente Nix com Postgres e Airflow configurados via `devenv`.
 * [x] **Camada Bronze (Ingestão):** Pipelines DuckDB convertendo dados brutos para Parquet.
 * [x] **Camada Silver (dbt):** Modelos de limpeza e deduplicação lógica.
 * [x] **Camada Gold (dbt):** Implementação do Spatial Join e regras de Marco Temporal.
 * [x] **Front-end:** Interface visual otimizada para Mobile com mapa de risco (Streamlit).
+* [ ] **Sensoriamento Remoto (Ground Truth):** Integração com satélites (Sentinel-2/GEE) para validar uso do solo (NDVI) e alertas de desmatamento, mitigando a instabilidade de dados declaratórios (SIGEF).
 * [ ] **Expansão Nacional:** Escalar a ingestão e processamento do BigQuery para cobrir todo o território brasileiro (Big Data Spatial).
 
 ---
 **Autor:** Raphael Soares
 
 *Projeto desenvolvido para portfólio de Data Engineering & Analytics.*
-```
