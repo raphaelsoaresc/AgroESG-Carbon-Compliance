@@ -114,7 +114,7 @@ with DAG(
         filepath=RAW_PATH,
         fs_conn_id='fs_default',
         poke_interval=30,
-        timeout=600,               # <--- CORREÇÃO: Aumentado para 10 minutos (era 60s)
+        timeout=600,           
         mode='reschedule'          
     )
 
@@ -153,7 +153,6 @@ with DAG(
 
     archive_original = BashOperator(
         task_id='archive_original_file',
-        # Adicionei -f no mv para forçar a movimentação sem pedir confirmação
         bash_command="""
             FILE_NAME="{{ ti.xcom_pull(task_ids='process_with_duckdb', key='original_file') }}";
             FILE_BASE="${FILE_NAME%.*}";

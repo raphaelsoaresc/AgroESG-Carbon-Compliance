@@ -64,11 +64,6 @@ def process_ibge_biomes():
     con = duckdb.connect(database=':memory:')
     con.execute("INSTALL spatial; LOAD spatial;")
 
-    # CORREÇÃO:
-    # ST_Transform(geom, 'ORIGEM', 'DESTINO')
-    # Origem IBGE = 'EPSG:4674' (SIRGAS 2000)
-    # Destino BQ  = 'EPSG:4326' (WGS 84)
-    
     query = f"""
         COPY (
             SELECT 

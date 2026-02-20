@@ -33,8 +33,7 @@ renamed_and_cleaned AS (
 deduplicated AS (
     SELECT 
         *,
-        -- Deduplicação pelo código do bioma
-        -- Embora o script Python faça 'WRITE_TRUNCATE', é boa prática manter a lógica
+
         ROW_NUMBER() OVER (
             PARTITION BY biome_code 
             ORDER BY ingested_at DESC

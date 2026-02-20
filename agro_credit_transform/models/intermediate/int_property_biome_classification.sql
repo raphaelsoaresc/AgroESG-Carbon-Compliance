@@ -21,9 +21,7 @@ matched_biomes AS (
         ST_DISTANCE(pc.centroid, b.geometry) as distance_to_biome
     FROM property_centroids pc
     INNER JOIN {{ ref('int_ibge_biomes_geometries') }} b 
-        -- AQUI ESTÁ A CORREÇÃO:
-        -- ST_DWITHIN cria um raio de busca (500 metros).
-        -- Se o centróide cair num "buraco" do mapa, ele puxa o bioma mais próximo.
+
         ON ST_DWITHIN(pc.centroid, b.geometry, 500) 
 )
 

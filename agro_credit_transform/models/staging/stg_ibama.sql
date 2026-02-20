@@ -29,7 +29,7 @@ renamed_and_filtered AS (
         UF as state,
         MUNICIPIO as city,
         DES_STATUS_FORMULARIO as form_status,
-        TIPO_AREA as area_type, -- Coluna solicitada
+        TIPO_AREA as area_type,
 
         -- DATA: Garante o tipo DATE
         COALESCE(

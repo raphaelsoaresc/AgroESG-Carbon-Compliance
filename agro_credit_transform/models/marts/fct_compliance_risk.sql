@@ -103,9 +103,9 @@ final_with_contamination AS (
         COALESCE(v.embargo_date, c.neighbor_embargo_date) as final_embargo_date
     FROM final_verdict v
     LEFT JOIN contamination_risk c ON v.property_id = c.property_id
-) -- <--- AQUI NÃO PODE TER VÍRGULA
+)
 
--- 8. OUTPUT FINAL (Sem a vírgula antes e com todas as colunas)
+-- 8. OUTPUT FINAL 
 SELECT 
     * EXCEPT(property_id, eligibility_status, final_eligibility_status, final_embargo_date),
     

@@ -18,7 +18,7 @@ renamed_and_filtered AS (
         status as certification_status,
         situacao_i as legal_situation,
         
-        -- Datas (O BigQuery já detectou algumas como DATE, o que é ótimo)
+        -- Datas
         data_submi as submission_date,
         data_aprov as approval_date,
         registro_d as registration_date,
@@ -35,8 +35,7 @@ renamed_and_filtered AS (
         ingested_at
 
     FROM source_data
-    -- Filtro opcional: Se quiser apenas imóveis com certificação ativa
-    -- WHERE status = 'CERTIFICADA' 
+
 ),
 
 deduplicated AS (

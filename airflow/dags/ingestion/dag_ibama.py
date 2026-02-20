@@ -29,7 +29,7 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-# Alterado para receber **kwargs e garantir o acesso ao 'ti'
+
 def process_ibama_file_with_duckdb(**kwargs):
     ti = kwargs['ti'] # Captura a instância da task com segurança
     

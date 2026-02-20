@@ -4,7 +4,6 @@ from pathlib import Path
 
 from airflow import DAG
 from cosmos import DbtDag, ProjectConfig, ProfileConfig, ExecutionConfig
-# Esta classe existe no seu ambiente (confirmado pelo erro anterior)
 from cosmos.profiles import GoogleCloudServiceAccountFileProfileMapping
 
 # --- DESCOBERTA DINÂMICA ---

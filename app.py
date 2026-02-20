@@ -148,7 +148,7 @@ with col_map:
     st.pydeck_chart(pdk.Deck(
         layers=[layer], 
         initial_view_state=view_state,
-        map_style="dark",  # Use apenas a palavra 'light' para fundo branco com cidades
+        map_style="dark",
         tooltip={"html": "<b>Alias:</b> {property_alias} <br/> <b>Status:</b> {eligibility_status}"}
     ))
 with col_chart:
