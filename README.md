@@ -4,14 +4,14 @@
 
 > **Status:** ✅ Orquestração (Cosmos) Ativa | 🧠 Motor de Compliance Operacional | 📊 Visualização (Front-end) Disponível
 
-Este projeto é uma solução de **Analytics Engineering & Data Engineering** focada na validação de critérios ESG para originação de créditos de carbono. A arquitetura evoluiu de um pipeline de extração simples para um ecossistema robusto que traduz o **Código Florestal Brasileiro** em regras de dados auditáveis e visualizáveis.
+Este projeto é uma solução de **Analytics Engineering & Data Engineering** focada na validação de critérios ESG para originação de créditos de carbono e identificação de propriedades embargadas. A arquitetura evoluiu de um pipeline de extração simples para um ecossistema robusto que traduz o **Código Florestal Brasileiro** em regras de dados auditáveis e visualizáveis.
 
 ## 🎯 O Problema de Negócio
 
 Para garantir a integridade de créditos de carbono e evitar o *Greenwashing*, é necessário auditar massivamente:
 1.  **Sobreposição com Embargos:** A propriedade invade áreas embargadas pelo IBAMA?
 2.  **Marco Temporal:** A infração ocorreu antes ou depois de julho de 2008 (Decreto Federal)?
-3.  **Regras de Bioma:** A propriedade respeita a reserva legal específica (ex: 80% na Amazônia vs 20% no Cerrado)?
+3.  **Regras de Bioma:** A propriedade respeita a reserva legal específica (80% na Amazônia, 35% no Cerrado e 20% no Pantanal)?
 4.  **Risco de Contaminação (Network Risk):** A propriedade é vizinha imediata de uma área desmatada, sugerindo "lavagem" de gado ou grãos?
 
 ## 🏗 Arquitetura e Fluxo de Dados
@@ -37,7 +37,7 @@ O front-end implementa estratégias avançadas de gerenciamento de memória:
 *   **Leitura Seletiva:** Otimização de tipos de dados (`float32`, `category`) para reduzir o consumo de RAM do navegador em até 80%.
 
 ### 3. Ambiente Hermético (Nix & uv)
-O projeto utiliza **Nix** para gerenciar dependências a nível de sistema operacional (como as bibliotecas C++ do **GDAL/GEOS**). Combinado com o **uv**, isso garante um ambiente 100% reprodutível e imutável.
+O projeto utiliza **Nix** para gerenciar dependências a nível de sistema operacional (como as bibliotecas C++ do **GDAL/GEOS**). Combinado com o **uv**, isso garante um ambiente hermético, 100% reprodutível e imutável.
 
 ### 4. Estratégia ELT Geoespacial (Push-down Computation)
 Em vez de processar geometrias pesadas em Python, o pipeline delega o processamento para o **BigQuery**. O dbt materializa as transformações dentro do Data Warehouse, permitindo escalar para milhões de polígonos (preparado para expansão Brasil).
