@@ -93,6 +93,8 @@ streamlit run app.py
 * [x] **Camada Silver (dbt):** Modelos de limpeza e deduplicação lógica.
 * [x] **Camada Gold (dbt):** Implementação do Spatial Join e regras de Marco Temporal.
 * [x] **Front-end:** Interface visual otimizada para Mobile com mapa de risco (Streamlit).
+* [ ] **Proteção de Territórios Sensíveis:** Integração de Terras Indígenas (FUNAI) e Territórios Quilombolas (INCRA) para bloqueio automático de originação em áreas de conflito.
+* [ ] **Inteligência de APPs:** Cruzamento de hidrografia (ANA) e declividade (DEM) para auditoria automática de Áreas de Preservação Permanente.
 * [ ] **Sensoriamento Remoto (Ground Truth):** Integração com satélites (Sentinel-2/GEE) para validar uso do solo (NDVI) e alertas de desmatamento, mitigando a instabilidade de dados declaratórios (SIGEF).
 * [ ] **Expansão Nacional:** Escalar a ingestão e processamento do BigQuery para cobrir todo o território brasileiro (Big Data Spatial).
 
