@@ -4,29 +4,35 @@
 ) }}
 
 WITH source_data AS (
-    SELECT * FROM {{ source('raw_data', 'ibge_biomes') }}
+    SELECT * FROM {{ source('raw_data', 'incra_quilombolas') }}
 ),
 
 renamed_and_cleaned AS (
     SELECT
-        CAST(CD_Bioma AS STRING) as biome_code, 
-        UPPER(TRIM(Bioma)) as biome_name,
+        -- Identificadores
+        CAST(id AS STRING) as territory_code,
         
-        -- ALTERAÇÃO AQUI: De wkt_geometry para geom (ou o nome real na raw)
-        geom as geometry_wkt, 
+        -- Atributos
+        UPPER(TRIM(name)) as community_name,
+        UPPER(TRIM(category_n)) as status_name,
+        area_ha,
         
+        -- Geometria
+        geom as geometry_wkt,
+        
+        -- Auditoria
         file_hash,
         source_filename,
         ingested_at
+
     FROM source_data
 ),
 
 deduplicated AS (
     SELECT 
         *,
-
         ROW_NUMBER() OVER (
-            PARTITION BY biome_code 
+            PARTITION BY territory_code 
             ORDER BY ingested_at DESC
         ) as row_num
     FROM renamed_and_cleaned

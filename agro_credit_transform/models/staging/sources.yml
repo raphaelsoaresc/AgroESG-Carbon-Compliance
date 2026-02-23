@@ -18,10 +18,37 @@ sources:
           - name: file_hash
             description: "Hash MD5 do arquivo original para controle de idempotência."
 
-      - name: ibge_biomes  # <--- NOVA TABELA ADICIONADA AQUI
+      - name: ibge_biomes
         description: "Dados espaciais dos Biomas Brasileiros (IBGE - Escala 1:250.000)."
         columns:
           - name: file_hash
             description: "Hash MD5 do arquivo original (Shapefile/Zip)."
           - name: wkt_geometry
             description: "Geometria do bioma em formato WKT (Texto), convertida para EPSG:4326."
+
+      - name: funai_terras_indigenas  
+        description: "Dados espaciais das Terras Indígenas (FUNAI) em diversas fases de homologação."
+        columns:
+          - name: file_hash
+            description: "Hash MD5 do arquivo original."
+          - name: geom
+            description: "Geometria em WKT vinda do DuckDB (EPSG:4326)."
+
+      - name: incra_quilombolas
+        description: "Dados espaciais dos Territórios Quilombolas (INCRA)."
+        columns:
+          - name: file_hash
+            description: "Hash MD5 do arquivo original."
+          - name: geom
+            description: "Geometria em WKT vinda do DuckDB (EPSG:4326)."
+
+      - name: ana_app_zones
+        description: "Zonas de APP geradas via DuckDB a partir da Base Hidrográfica da ANA (BHO Nível 07)."
+        columns:
+          - name: wkt_geom_app
+            description: "Geometria do polígono da APP em formato WKT (EPSG:4326)."
+          - name: river_order
+            description: "Ordem de Strahler do trecho do rio."
+
+      - name: ibge_bc250_app_zones
+        description: "Zonas de APP de massas d'água (lagos/represas) vindas da BC250 do IBGE."

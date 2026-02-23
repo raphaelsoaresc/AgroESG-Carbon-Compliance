@@ -6,19 +6,18 @@ import duckdb
 from airflow import DAG
 from airflow.utils.task_group import TaskGroup
 from airflow.operators.python import PythonOperator
+from airflow.sensors.python import PythonSensor  # <--- CORREÇÃO AQUI
 from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 from airflow.operators.bash import BashOperator
-from airflow.sensors.filesystem import FileSensor
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
-# --- CONFIGURAÇÕES (Seguindo seu padrão exato)
+# --- CONFIGURAÇÕES (Padrão solicitado)
 PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 BUCKET_NAME = os.getenv("GCP_BUCKET_NAME")
 DATASET_ID = "agro_esg_raw"
 STAGING_PATH = "./data/staging"
 
-# Definição das fontes com caminhos fixos para evitar NoneType
 SOURCES = {
     'ibge': {
         'table_id': "ibge_biomes",
@@ -45,18 +44,21 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
+# Função para o PythonSensor verificar se existe arquivo .zip ou .shp
+def check_for_files(path):
+    if not os.path.exists(path):
+        os.makedirs(path, exist_ok=True)
+    files = [f for f in os.listdir(path) if f.endswith(('.zip', '.shp'))]
+    return len(files) > 0
+
 def process_reference_geo_file(source_key, ti):
     conf = SOURCES[source_key]
     raw_path = conf['raw_path']
     extracted_files_list = []
     
-    if not os.path.exists(raw_path):
-        os.makedirs(raw_path, exist_ok=True)
-        raise FileNotFoundError(f"Diretório RAW criado: {raw_path}. Coloque o arquivo lá.")
-
     files = [f for f in os.listdir(raw_path) if f.endswith(('.zip', '.shp'))]
     if not files:
-        raise FileNotFoundError(f"Nenhum arquivo de {source_key} encontrado em {raw_path}")
+        raise FileNotFoundError(f"Nenhum arquivo encontrado em {raw_path}")
     
     original_filename = files[0]
     full_path = os.path.join(raw_path, original_filename)
@@ -66,7 +68,6 @@ def process_reference_geo_file(source_key, ti):
             file_hash = hashlib.md5(f.read()).hexdigest()
         
         working_path = full_path
-        
         if original_filename.endswith('.zip'):
             with zipfile.ZipFile(full_path, 'r') as zip_ref:
                 extracted_files_list = zip_ref.namelist()
@@ -122,13 +123,17 @@ with DAG(
     for source_id, config in SOURCES.items():
         with TaskGroup(group_id=f'group_{source_id}') as tg:
             
-            wait_for_file = FileSensor(
+            # 1. Definimos o ID da tarefa de processamento para usar no XCom
+            # Isso evita confusão com as aspas dentro do Jinja
+            process_task_id = f"group_{source_id}.process_{source_id}_with_duckdb"
+            
+            wait_for_file = PythonSensor(
                 task_id=f'wait_for_{source_id}_file',
-                filepath=config['raw_path'],
-                fs_conn_id='fs_default',
+                python_callable=check_for_files,
+                op_kwargs={'path': config['raw_path']},
                 poke_interval=30,
-                timeout=600,           
-                mode='reschedule'          
+                timeout=600,
+                mode='reschedule'
             )
 
             process_file = PythonOperator(
@@ -137,19 +142,24 @@ with DAG(
                 op_kwargs={'source_key': source_id}
             )
 
+            # 2. Upload GCS: Usando concatenação simples (+) em vez de f-string com chaves quádruplas
             upload_to_gcs = LocalFilesystemToGCSOperator(
                 task_id=f'upload_{source_id}_parquet_to_gcs',
-                src="{{ ti.xcom_pull(task_ids='group_" + source_id + ".process_" + source_id + "_with_duckdb', key='output_path') }}",
-                dst=f"bronze/reference/{source_id}/" + "{{ ti.xcom_pull(task_ids='group_" + source_id + ".process_" + source_id + "_with_duckdb', key='output_filename') }}",
+                src="{{ ti.xcom_pull(task_ids='" + process_task_id + "', key='output_path') }}",
+                dst=f"bronze/reference/{source_id}/" + "{{ ti.xcom_pull(task_ids='" + process_task_id + "', key='output_filename') }}",
                 bucket=BUCKET_NAME,
                 gcp_conn_id='google_cloud_default'
             )
 
+            # 3. Load BQ: Corrigindo a URI que estava vindo com "}}" no final
             load_to_bq = BigQueryInsertJobOperator(
                 task_id=f'load_{source_id}_to_bigquery_bronze',
                 configuration={
                     "load": {
-                        "sourceUris": [f"gs://{BUCKET_NAME}/bronze/reference/{source_id}/{{{{ ti.xcom_pull(task_ids='group_" + source_id + ".process_" + source_id + "_with_duckdb', key='output_filename') }}}}"],
+                        "sourceUris": [
+                            f"gs://{BUCKET_NAME}/bronze/reference/{source_id}/" + 
+                            "{{ ti.xcom_pull(task_ids='" + process_task_id + "', key='output_filename') }}"
+                        ],
                         "destinationTable": {
                             "projectId": PROJECT_ID,
                             "datasetId": DATASET_ID,
@@ -162,11 +172,12 @@ with DAG(
                 }
             )
 
+            # 4. Archive: Limpando a sintaxe do Bash
             archive_original = BashOperator(
                 task_id=f'archive_{source_id}_original_file',
                 bash_command="""
-                    FILE_NAME="{{ ti.xcom_pull(task_ids='group_""" + source_id + """.process_""" + source_id + """_with_duckdb', key='original_file') }}";
-                    PARQUET_LOCAL="{{ ti.xcom_pull(task_ids='group_""" + source_id + """.process_""" + source_id + """_with_duckdb', key='output_path') }}";
+                    FILE_NAME="{{ ti.xcom_pull(task_ids='""" + process_task_id + """', key='original_file') }}";
+                    PARQUET_LOCAL="{{ ti.xcom_pull(task_ids='""" + process_task_id + """', key='output_path') }}";
                     ARCHIVE_DIR="{{ params.archive_path }}/$(date +%Y%m%d)";
                     
                     mkdir -p "$ARCHIVE_DIR";

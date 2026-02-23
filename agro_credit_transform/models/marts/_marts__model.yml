@@ -22,15 +22,16 @@ models:
         description: "Status final de elegibilidade após regras de bioma, embargo e contaminação."
         data_tests:
           - accepted_values:
-              values: [
-                'ELIGIBLE', 
-                'ELIGIBLE - NEGLIGIBLE OVERLAP', 
-                'ELIGIBLE W/ MONITORING (CONSOLIDATED)',
-                'NOT ELIGIBLE - CRITICAL AMAZON VIOLATION',
-                'NOT ELIGIBLE - POST-2008 VIOLATION',
-                'NOT ELIGIBLE - RISK BY OVERLAP (CONTAMINATION)',
-                'UNDER ANALYSIS'
-              ]
+              values:
+                - 'ELIGIBLE'
+                - 'ELIGIBLE - NEGLIGIBLE OVERLAP'
+                - 'ELIGIBLE W/ MONITORING (CONSOLIDATED)'
+                - 'NOT ELIGIBLE - CRITICAL AMAZON VIOLATION'
+                - 'NOT ELIGIBLE - POST-2008 VIOLATION'
+                - 'NOT ELIGIBLE - RISK BY ADJACENCY (CONTAMINATION)'
+                - 'NOT ELIGIBLE - INDIGENOUS LAND OVERLAP'
+                - 'NOT ELIGIBLE - QUILOMBOLA TERRITORY OVERLAP'
+                - 'UNDER ANALYSIS'
 
       - name: property_area_ha
         data_tests:
