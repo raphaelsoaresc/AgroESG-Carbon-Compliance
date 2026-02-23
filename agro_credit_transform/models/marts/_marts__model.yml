@@ -24,6 +24,7 @@ models:
           - accepted_values:
               values:
                 - 'ELIGIBLE'
+                - 'ELIGIBLE'
                 - 'ELIGIBLE - NEGLIGIBLE OVERLAP'
                 - 'ELIGIBLE W/ MONITORING (CONSOLIDATED)'
                 - 'NOT ELIGIBLE - CRITICAL AMAZON VIOLATION'
@@ -31,6 +32,7 @@ models:
                 - 'NOT ELIGIBLE - RISK BY ADJACENCY (CONTAMINATION)'
                 - 'NOT ELIGIBLE - INDIGENOUS LAND OVERLAP'
                 - 'NOT ELIGIBLE - QUILOMBOLA TERRITORY OVERLAP'
+                - 'NOT ELIGIBLE - CRITICAL APP VIOLATION'  # <--- ADICIONE ESTA LINHA
                 - 'UNDER ANALYSIS'
 
       - name: property_area_ha

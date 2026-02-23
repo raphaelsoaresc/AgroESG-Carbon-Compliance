@@ -51,4 +51,4 @@ jobs:
           export BQ_DATASET_ID="${{ vars.BQ_DATASET_ID }}"
           export IBAMA_URL_CSV="${{ secrets.IBAMA_URL_CSV }}"
           export GCS_BUCKET_NAME="${{ vars.GCS_BUCKET_NAME }}"
-          uv run src/load_ibama.py
+          uv run legacy/download_ibama_source_legacy.py

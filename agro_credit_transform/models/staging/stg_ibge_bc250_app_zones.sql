@@ -4,23 +4,23 @@
 ) }}
 
 WITH source_data AS (
-    -- Referência à tabela populada pela DAG de Hidrografia
-    SELECT * FROM {{ source('raw_data', 'ana_app_zones') }}
+    -- Referência à tabela populada pela DAG para o IBGE BC250
+    SELECT * FROM {{ source('raw_data', 'ibge_bc250_app_zones') }}
 ),
 
 renamed_and_cleaned AS (
     SELECT
-        -- Identificadores (Pfafstetter Code)
-        CAST(cobacia AS STRING) as basin_code,
+        -- Identificador gerado via row_number() no DuckDB
+        CAST(cobacia AS STRING) as water_body_id,
         
-        -- Atributos do Rio
+        -- Atributos (Para lagos, definimos river_order como 0 na ingestão)
         CAST(river_order AS INT64) as river_order,
         CAST(app_width_m AS FLOAT64) as app_width_meters,
         
-        -- Geometria (WKT gerado pelo DuckDB)
+        -- Geometria (WKT gerado pelo DuckDB com buffer de 30m)
         wkt_geom_app as geometry_wkt,
         
-        -- Auditoria (Linhagem da DAG)
+        -- Auditoria
         file_hash,
         ingested_at
 
@@ -30,9 +30,9 @@ renamed_and_cleaned AS (
 deduplicated AS (
     SELECT 
         *,
-        -- Mantemos apenas a versão mais recente de cada trecho de bacia/rio
+        -- Deduplicação baseada no ID gerado
         ROW_NUMBER() OVER (
-            PARTITION BY basin_code 
+            PARTITION BY water_body_id 
             ORDER BY ingested_at DESC
         ) as row_num
     FROM renamed_and_cleaned

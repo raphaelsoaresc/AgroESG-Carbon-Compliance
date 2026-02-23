@@ -16,8 +16,7 @@ WITH biomes AS (
             ELSE 0.20
         END as legal_reserve_perc,
         FALSE as is_hard_block,
-        2 as priority_level, -- Prioridade menor (regra de % de reserva)
-        -- Linhagem vinda da DAG/STG
+        2 as priority_level,
         file_hash,
         source_filename,
         ingested_at,
@@ -33,7 +32,7 @@ indigenous AS (
         stage_name as restriction_subtype,
         NULL as legal_reserve_perc,
         TRUE as is_hard_block,
-        1 as priority_level, -- Prioridade máxima (bloqueio total)
+        1 as priority_level,
         file_hash,
         source_filename,
         ingested_at,
@@ -49,12 +48,46 @@ quilombolas AS (
         status_name as restriction_subtype,
         NULL as legal_reserve_perc,
         TRUE as is_hard_block,
-        1 as priority_level, -- Prioridade máxima (bloqueio total)
+        1 as priority_level,
         file_hash,
         source_filename,
         ingested_at,
         geometry_wkt
     FROM {{ ref('stg_incra_quilombolas') }}
+),
+
+-- NOVA FONTE: APPs de Rios (ANA)
+app_rivers AS (
+    SELECT 
+        basin_code as restriction_id,
+        CONCAT('APP RIO - ORDEM ', CAST(river_order AS STRING)) as restriction_name,
+        'APP_ZONE' as restriction_type,
+        'RIVER' as restriction_subtype,
+        NULL as legal_reserve_perc,
+        TRUE as is_hard_block,
+        1 as priority_level,
+        file_hash,
+        'ANA_BHO_NIVEL_07' as source_filename,
+        ingested_at,
+        geometry_wkt
+    FROM {{ ref('stg_ana_app_zones') }}
+),
+
+-- NOVA FONTE: APPs de Lagos/Represas (IBGE BC250)
+app_lakes AS (
+    SELECT 
+        water_body_id as restriction_id,
+        'APP MASSA DAGUA' as restriction_name,
+        'APP_ZONE' as restriction_type,
+        'WATER_BODY' as restriction_subtype,
+        NULL as legal_reserve_perc,
+        TRUE as is_hard_block,
+        1 as priority_level,
+        file_hash,
+        'IBGE_BC250_2025' as source_filename,
+        ingested_at,
+        geometry_wkt
+    FROM {{ ref('stg_ibge_bc250_app_zones') }}
 ),
 
 unioned AS (
@@ -63,19 +96,26 @@ unioned AS (
     SELECT * FROM indigenous
     UNION ALL
     SELECT * FROM quilombolas
+    UNION ALL
+    SELECT * FROM app_rivers
+    UNION ALL
+    SELECT * FROM app_lakes
 ),
 
 spatial_processing AS (
     SELECT
-        *,
+        * EXCEPT(geometry_wkt),
+        -- Converte o WKT para GEOGRAPHY. 
+        -- O DuckDB já simplificou, então aqui o processamento será rápido.
         SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry_raw
     FROM unioned
 ),
 
 final_enriched AS (
     SELECT
-        * EXCEPT(geometry_wkt, geometry_raw),
-        ST_SIMPLIFY(geometry_raw, 100) as geometry,
+        * EXCEPT(geometry_raw),
+        -- Mantemos a geometria e calculamos a BBox para o matching de alta performance
+        geometry_raw as geometry,
         ST_BOUNDINGBOX(geometry_raw) as bbox
     FROM spatial_processing
     WHERE geometry_raw IS NOT NULL
