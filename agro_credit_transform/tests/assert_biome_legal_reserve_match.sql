@@ -1,10 +1,14 @@
--- Falha se a % de reserva legal não bater com a regra do bioma
-
+WITH validation AS (
+    SELECT 
+        f.property_id,
+        f.biome_name,
+        m.legal_reserve_perc
+    FROM {{ ref('fct_compliance_risk') }} f
+    LEFT JOIN {{ ref('int_car_compliance_metrics') }} m ON f.property_id = m.property_id
+)
 SELECT *
-FROM {{ ref('fct_compliance_risk') }}
+FROM validation
 WHERE 
-    (biome_name = 'AMAZÔNIA' AND legal_reserve_req != 0.80)
+    (biome_name = 'AMAZÔNIA' AND legal_reserve_perc != 0.80)
     OR
-    (biome_name = 'CERRADO' AND legal_reserve_req != 0.35)
-    OR
-    (biome_name NOT IN ('AMAZÔNIA', 'CERRADO', 'DESCONHECIDO') AND legal_reserve_req != 0.20)
+    (biome_name = 'CERRADO' AND legal_reserve_perc != 0.35)

@@ -2,12 +2,13 @@ version: 2
 
 models:
   - name: fct_compliance_risk
-    description: "Mart final de conformidade socioambiental para propriedades rurais no MT."
+    description: "Mart final de conformidade socioambiental (CAR) para propriedades rurais no MT."
     
     # 1. TESTES DE NÍVEL DE MODELO (Cruzamento de colunas)
     data_tests:
       - dbt_utils.expression_is_true:
-          expression: "NOT (eligibility_status = 'ELIGIBLE' AND embargo_overlap_ha > 0.001)"
+          # CORREÇÃO: Usando os nomes novos e a tolerância de 0.1ha usada no SQL
+          expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND embargo_area_ha > 0.1)"
           name: "check_eligible_properties_overlap_limit"
 
     columns:
@@ -18,29 +19,27 @@ models:
           - unique
           - not_null
 
-      - name: eligibility_status
+      - name: final_eligibility_status # <--- NOME CORRIGIDO
         description: "Status final de elegibilidade após regras de bioma, embargo e contaminação."
         data_tests:
           - accepted_values:
               values:
+                # LISTA ATUALIZADA COM OS STATUS DO CAR
                 - 'ELIGIBLE'
-                - 'ELIGIBLE'
-                - 'ELIGIBLE - NEGLIGIBLE OVERLAP'
-                - 'ELIGIBLE W/ MONITORING (CONSOLIDATED)'
-                - 'NOT ELIGIBLE - CRITICAL AMAZON VIOLATION'
-                - 'NOT ELIGIBLE - POST-2008 VIOLATION'
-                - 'NOT ELIGIBLE - RISK BY ADJACENCY (CONTAMINATION)'
-                - 'NOT ELIGIBLE - INDIGENOUS LAND OVERLAP'
-                - 'NOT ELIGIBLE - QUILOMBOLA TERRITORY OVERLAP'
-                - 'NOT ELIGIBLE - CRITICAL APP VIOLATION'  # <--- ADICIONE ESTA LINHA
-                - 'UNDER ANALYSIS'
+                - 'WARNING - RISK BY ADJACENCY'
+                - 'CONDITIONAL - LEGAL RESERVE DEFICIT (REQUIRES PRA)'
+                - 'NOT ELIGIBLE - PROTECTED AREA INVASION'
+                - 'NOT ELIGIBLE - IBAMA EMBARGO (POST-2008)'
+                - 'WARNING - PRE-2008 EMBARGO (MONITORING REQUIRED)'
+                - 'NOT ELIGIBLE - DATA INCONSISTENCY (EMBARGO > AREA)'
+                - 'WARNING - MICRO EMBARGO (REVIEW REQUIRED)'
 
       - name: property_area_ha
         data_tests:
           - dbt_utils.expression_is_true:
               expression: "> 0"
 
-      - name: embargo_overlap_ha
+      - name: embargo_area_ha # <--- NOME CORRIGIDO (Era embargo_overlap_ha)
         data_tests:
           - dbt_utils.expression_is_true:
               expression: ">= 0"

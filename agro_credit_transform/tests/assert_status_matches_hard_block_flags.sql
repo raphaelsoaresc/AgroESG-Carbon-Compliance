@@ -1,6 +1,10 @@
 SELECT *
 FROM {{ ref('fct_compliance_risk') }}
 WHERE 
-    (eligibility_status = 'NOT ELIGIBLE - INDIGENOUS LAND OVERLAP' AND is_indigenous_land = FALSE)
+    -- Se o status diz que invadiu área protegida, a flag TEM que ser TRUE
+    (final_eligibility_status = 'NOT ELIGIBLE - PROTECTED AREA INVASION' AND is_protected_area_overlap = FALSE)
+    
     OR
-    (eligibility_status = 'NOT ELIGIBLE - QUILOMBOLA TERRITORY OVERLAP' AND is_quilombola_land = FALSE)
+    
+    -- Se a flag é TRUE e a área é relevante (>0.1), o status NÃO pode ser Elegível
+    (is_protected_area_overlap = TRUE AND protected_overlap_ha > 0.1 AND final_eligibility_status LIKE 'ELIGIBLE%')
