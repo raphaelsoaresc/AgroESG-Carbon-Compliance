@@ -37,7 +37,7 @@ indigenous AS (
         source_filename,
         ingested_at,
         geometry_wkt
-    FROM {{ ref('stg_funai_terras_indigenas') }}
+    FROM {{ ref('stg_funai_indigenous_lands') }}
 ),
 
 quilombolas AS (
@@ -53,7 +53,7 @@ quilombolas AS (
         source_filename,
         ingested_at,
         geometry_wkt
-    FROM {{ ref('stg_incra_quilombolas') }}
+    FROM {{ ref('stg_incra_quilombola_lands') }}
 ),
 
 -- NOVA FONTE: APPs de Rios (ANA)
