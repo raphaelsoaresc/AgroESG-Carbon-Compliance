@@ -26,6 +26,10 @@ renamed_and_filtered AS (
     SELECT
         file_hash,
         ingested_at,
+        
+        -- IDENTIFICAÇÃO: Limpeza de CPF/CNPJ (remove . , - /)
+        REGEXP_REPLACE(CAST(CPF_CNPJ_EMBARGADO AS STRING), r'[\.\-\/\,]', '') as tax_id,
+
         UF as state,
         MUNICIPIO as city,
         DES_STATUS_FORMULARIO as form_status,
@@ -41,7 +45,7 @@ renamed_and_filtered AS (
         -- ÁREA: Limpeza de separadores brasileiros
         SAFE_CAST(REPLACE(REPLACE(CAST(QTD_AREA_EMBARGADA AS STRING), '.', ''), ',', '.') AS FLOAT64) as reported_area_ha,
 
-        -- COORDENADAS: Trata o erro de múltiplos pontos (ex: -12.345.678 -> -12.345678)
+        -- COORDENADAS
         SAFE_CAST(
             CASE 
                 WHEN LENGTH(REGEXP_REPLACE(REPLACE(CAST(NUM_LONGITUDE_TAD AS STRING), ',', ''), r'\.', '')) > 5 
