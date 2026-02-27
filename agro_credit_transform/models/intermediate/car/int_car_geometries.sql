@@ -33,6 +33,8 @@ final_cleaning AS (
     FROM spatial_processing
     -- Filtra geometrias que falharam na conversão (NULL)
     WHERE geometry IS NOT NULL
+        -- Garante que só passamos Polígonos (remove pontos ou linhas perdidas)
+        AND ST_GEOMETRYTYPE(geometry) IN ('ST_Polygon', 'ST_MultiPolygon')
 )
 
 SELECT * EXCEPT(rn) 

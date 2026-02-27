@@ -11,6 +11,7 @@ WITH staging_data AS (
 spatial_cleaning AS (
     SELECT
         * EXCEPT(geometry_wkt),
+        -- Limpeza específica para SIGEF que muitas vezes vem com coordenadas Z (3D)
         REGEXP_REPLACE(
             REPLACE(UPPER(geometry_wkt), ' Z ', ' '),
             r' [0-9.-]+([,)])',
@@ -37,6 +38,8 @@ final_cleaning AS (
         ROW_NUMBER() OVER(PARTITION BY property_id ORDER BY ingested_at DESC) as rn
     FROM spatial_processing
     WHERE geometry IS NOT NULL
+    -- Filtra apenas Polígonos e MultiPolígonos
+        AND ST_GEOMETRYTYPE(geometry) IN ('ST_Polygon', 'ST_MultiPolygon')
 )
 
 SELECT * EXCEPT(rn) 
