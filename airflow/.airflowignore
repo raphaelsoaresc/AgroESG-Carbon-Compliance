@@ -1,0 +1,6 @@
+# Ignorar ambientes virtuais e pastas de configuração
+\.devenv/
+\.venv/
+node_modules/
+target/
+logs/

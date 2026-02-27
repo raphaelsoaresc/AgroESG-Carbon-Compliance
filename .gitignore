@@ -26,7 +26,8 @@ airflow/*.err
 airflow/standalone_admin_password.txt
 # Configurações web locais
 airflow/webserver_config.py
-
+# Airflow logs
+*.out
 # =======================================================
 # 3. dbt (DO SEU ARQUIVO ORIGINAL)
 # =======================================================
