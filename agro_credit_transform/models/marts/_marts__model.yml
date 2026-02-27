@@ -1,45 +1,58 @@
 version: 2
 
 models:
-  - name: fct_compliance_risk
-    description: "Mart final de conformidade socioambiental (CAR) para propriedades rurais no MT."
+  - name: fct_compliance_risk # Certifique-se que o nome aqui bate com o nome do seu arquivo .sql
+    description: "Mart final de conformidade socioambiental (CAR) integrando riscos Ambientais (IBAMA) e Sociais (MTE/Slave Labor)."
     
-    # 1. TESTES DE NÍVEL DE MODELO (Cruzamento de colunas)
+    # 1. TESTES DE NÍVEL DE MODELO (Integridade das Regras de Negócio)
     data_tests:
       - dbt_utils.expression_is_true:
-          # CORREÇÃO: Usando os nomes novos e a tolerância de 0.1ha usada no SQL
+          # Garante que nada saia como ELIGIBLE se houver embargo ambiental significativo
           expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND embargo_area_ha > 0.1)"
-          name: "check_eligible_properties_overlap_limit"
+          name: "check_eligible_properties_environmental_limit"
+      
+      - dbt_utils.expression_is_true:
+          # NOVO: Garante que nada saia como ELIGIBLE se houver risco de trabalho escravo
+          expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND slave_labor_overlap_ha > 0.1)"
+          name: "check_eligible_properties_social_limit"
 
     columns:
-      # 2. TESTES DE NÍVEL DE COLUNA
       - name: property_alias
         description: "ID anonimizado da propriedade."
         data_tests:
           - unique
           - not_null
 
-      - name: final_eligibility_status # <--- NOME CORRIGIDO
-        description: "Status final de elegibilidade após regras de bioma, embargo e contaminação."
+      - name: final_eligibility_status
+        description: "Status final de elegibilidade após regras de bioma, embargo, trabalho escravo e contaminação."
         data_tests:
           - accepted_values:
               values:
-                # LISTA ATUALIZADA COM OS STATUS DO CAR
                 - 'ELIGIBLE'
                 - 'WARNING - RISK BY ADJACENCY'
                 - 'CONDITIONAL - LEGAL RESERVE DEFICIT (REQUIRES PRA)'
                 - 'NOT ELIGIBLE - PROTECTED AREA INVASION'
                 - 'NOT ELIGIBLE - IBAMA EMBARGO (POST-2008)'
+                - 'NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)' # <--- NOVO STATUS ADICIONADO
                 - 'WARNING - PRE-2008 EMBARGO (MONITORING REQUIRED)'
                 - 'NOT ELIGIBLE - DATA INCONSISTENCY (EMBARGO > AREA)'
                 - 'WARNING - MICRO EMBARGO (REVIEW REQUIRED)'
+
+      - name: slave_labor_overlap_ha # <--- NOVA COLUNA DOCUMENTADA
+        description: "Área de sobreposição com polígonos vinculados a trabalho escravo (via SIGEF)."
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+
+      - name: slave_labor_offender # <--- NOVA COLUNA DOCUMENTADA
+        description: "Nome do infrator identificado na Lista Suja do MTE."
 
       - name: property_area_ha
         data_tests:
           - dbt_utils.expression_is_true:
               expression: "> 0"
 
-      - name: embargo_area_ha # <--- NOME CORRIGIDO (Era embargo_overlap_ha)
+      - name: embargo_area_ha
         data_tests:
           - dbt_utils.expression_is_true:
               expression: ">= 0"

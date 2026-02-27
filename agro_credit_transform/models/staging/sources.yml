@@ -69,3 +69,13 @@ sources:
 
       - name: car_sobreposicao
         description: "Sobreposição com TIs e UCs (CSV)."
+      
+      - name: mte_slave_labor_history
+        description: "Cadastro de Empregadores que tenham submetido trabalhadores a condições análogas à de escravo (Lista Suja do MTE)."
+        columns:
+          - name: file_hash
+            description: "Hash MD5 do arquivo original para controle de idempotência."
+          - name: cnpjcpf
+            description: "Identificador único do infrator (CPF ou CNPJ)."
+          - name: estabelecimento
+            description: "String bruta contendo nome da propriedade, endereço e localidade."

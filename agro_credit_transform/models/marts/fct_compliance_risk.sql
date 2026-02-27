@@ -41,6 +41,7 @@ hard_blocks AS (
 ),
 
 -- 4. CRUZAMENTO COM EMBARGOS (IBAMA)
+-- OTIMIZAÇÃO REGIONAL MANTIDA (Foco em MT/Matopiba para performance)
 embargo_check AS (
     SELECT
         p.property_id,
@@ -50,6 +51,17 @@ embargo_check AS (
     INNER JOIN {{ ref('int_ibama_geometries') }} i
         ON ST_INTERSECTS(p.geometry, i.geometry)
     WHERE ST_INTERSECTSBOX(i.geometry, -61.7, -18.1, -50.1, -7.3)
+    GROUP BY 1
+),
+
+-- 4.5. NOVO: CRUZAMENTO COM TRABALHO ESCRAVO (MTE/SIGEF)
+slave_labor_check AS (
+    SELECT
+        car_property_id,
+        MAX(overlap_ha) as slave_labor_overlap_ha,
+        MAX(employer_name) as slave_labor_offender
+    FROM {{ ref('int_compliance__final_spatial_check') }}
+    WHERE risk_type = 'SOCIAL_RISK_SLAVE_LABOR'
     GROUP BY 1
 ),
 
@@ -71,12 +83,17 @@ full_context AS (
         COALESCE(hb.protected_area_overlap_ha, 0) as protected_overlap_ha,
         
         COALESCE(e.embargo_area_ha, 0) as embargo_area_ha,
-        e.earliest_embargo_date as embargo_date
+        e.earliest_embargo_date as embargo_date,
+
+        -- NOVAS COLUNAS: Trabalho Escravo
+        COALESCE(sl.slave_labor_overlap_ha, 0) as slave_labor_overlap_ha,
+        sl.slave_labor_offender
 
     FROM properties p
     LEFT JOIN compliance_metrics c ON p.property_id = c.property_id
     LEFT JOIN hard_blocks hb ON p.property_id = hb.property_id
     LEFT JOIN embargo_check e ON p.property_id = e.property_id
+    LEFT JOIN slave_labor_check sl ON p.property_id = sl.car_property_id
 ),
 
 -- 6. VERDITO DE ELEGIBILIDADE
@@ -88,16 +105,20 @@ final_verdict AS (
             WHEN embargo_area_ha > (property_area_ha + 0.5)
                 THEN 'NOT ELIGIBLE - DATA INCONSISTENCY (EMBARGO > AREA)'
 
+            -- 0.5. NOVO: BLOQUEIO POR TRABALHO ESCRAVO (Tolerância Zero)
+            -- AJUSTE FEITO AQUI: Mudamos de > 0.1 para > 0
+            WHEN slave_labor_overlap_ha > 0
+                THEN 'NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)'
+
             -- 1. Bloqueio Total: Invasão de TI/Quilombola/UC
             WHEN is_protected_area_overlap AND protected_overlap_ha > 0.1 
                 THEN 'NOT ELIGIBLE - PROTECTED AREA INVASION'
             
-            -- 2. Bloqueio Total: Embargo Pós-2008 (Acima da tolerância técnica de 0.1ha)
+            -- 2. Bloqueio Total: Embargo Pós-2008
             WHEN embargo_area_ha > 0.1 AND embargo_date >= '2008-07-22' 
                 THEN 'NOT ELIGIBLE - IBAMA EMBARGO (POST-2008)'
 
-            -- 2.5. Alerta de Micro-Embargo (Entre 0.001ha e 0.1ha)
-            -- Resolve o problema das 46 fazendas com sobreposição mínima (erro de GPS)
+            -- 2.5. Alerta de Micro-Embargo
             WHEN embargo_area_ha > 0.001 AND embargo_date >= '2008-07-22'
                 THEN 'WARNING - MICRO EMBARGO (REVIEW REQUIRED)'
             
@@ -114,22 +135,17 @@ final_verdict AS (
     FROM full_context
 ),
 
--- 7. RISCO DE CONTAMINAÇÃO
+-- 7. RISCO DE CONTAMINAÇÃO (Vizinhos)
 contamination_risk AS (
     SELECT 
         f1.property_id,
         TRUE as has_contaminated_neighbor
-    FROM (
-        SELECT property_id, geometry, ST_GEOHASH(centroid, 5) as geo_prefix 
-        FROM final_verdict 
-        WHERE eligibility_status LIKE 'ELIGIBLE%' OR eligibility_status LIKE 'CONDITIONAL%'
-    ) f1
-    INNER JOIN (
-        SELECT geometry, ST_GEOHASH(centroid, 5) as geo_prefix
-        FROM final_verdict
-        WHERE eligibility_status LIKE 'NOT ELIGIBLE%'
-    ) f2 ON f1.geo_prefix = f2.geo_prefix 
-    WHERE ST_INTERSECTS(f1.geometry, f2.geometry)
+    FROM final_verdict f1
+    INNER JOIN final_verdict f2 
+        ON ST_INTERSECTS(f1.geometry, f2.geometry)
+    WHERE (f1.eligibility_status LIKE 'ELIGIBLE%' OR f1.eligibility_status LIKE 'CONDITIONAL%')
+        AND f2.eligibility_status LIKE 'NOT ELIGIBLE%'
+        AND f1.property_id != f2.property_id
     GROUP BY 1
 )
 
@@ -137,6 +153,7 @@ contamination_risk AS (
 SELECT 
     v.property_id,
     v.property_name,
+    v.slave_labor_offender, -- Nome do infrator (ex: Ernani)
     v.biome_name,
     v.property_area_ha,
     
@@ -150,8 +167,8 @@ SELECT
     ROUND(v.rl_balance_ha, 2) as rl_balance_ha,
     v.embargo_date,
     ROUND(v.embargo_area_ha, 2) as embargo_area_ha,
+    ROUND(v.slave_labor_overlap_ha, 2) as slave_labor_overlap_ha,
     
-    -- Colunas necessárias para os testes passarem
     v.is_protected_area_overlap, 
     v.protected_overlap_ha,
 
@@ -159,7 +176,6 @@ SELECT
     ST_X(v.centroid) as longitude,
     ST_ASGEOJSON(ST_SIMPLIFY(v.geometry, 10)) as geom_json,
     
-    -- Alias robusto (12 chars Hex) para evitar colisão no teste unique
     CONCAT('Fazenda ', SUBSTR(TO_HEX(MD5(v.property_id)), 1, 12)) as property_alias,
     
     CURRENT_TIMESTAMP() as mart_updated_at
