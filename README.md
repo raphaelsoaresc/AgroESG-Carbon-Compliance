@@ -1,21 +1,21 @@
-# 🌿 AgroESG Carbon Compliance
+# 🌿 Caipora Sentinela | Motor de Compliance Geoespacial para o Agronegócio
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://agromarte.agrimarketintel.com/)
 
 > **Status:** ✅ Orquestração (Airflow + Cosmos) | 🧠 Motor de Regras (dbt + BigQuery) | 🛰️ Monitoramento Satelital (GEE) | 📊 Dashboard (Streamlit) | 🚀 API (FastAPI)
 
-Este projeto é uma plataforma completa de **Geospatial Data & Analytics Engineering** focada na validação rigorosa de critérios ESG para a originação de créditos de carbono e auditoria de risco socioambiental em propriedades rurais. Com foco estratégico no estado do **Mato Grosso (MT)**, o sistema processa dados de mais de **211.000 propriedades**.
+O **Caipora Sentinela** é um motor completo de **Geospatial Data & Analytics Engineering** focado na validação rigorosa de critérios ESG para a originação de crédito rural e mercado de carbono. Com foco estratégico no estado do **Mato Grosso (MT)**, a *engine* processa dados de mais de **211.000 propriedades**.
 
 ## 🚀 Evolução do Projeto: Da Experimentação à Produção
 
 O projeto nasceu de uma necessidade de automatizar análises que antes eram manuais e fragmentadas. A arquitetura evoluiu significativamente:
 
-*   **Fase 1 (Legado):** O fluxo dependia de **Jupyter Notebooks** e scripts de scraping instáveis para extrair dados do SIGEF e IBAMA. Usando *Python (pandas/geopandas)*, as transformações esbarravam em limites de memória local e os dados iam para o **DBeaver/PostGIS** para cruzamentos espaciais manuais.
-*   **Fase 2 (Atual):** Para ganhar escala e governança, o projeto foi refatorado para uma arquitetura de **Data Lakehouse**. Substituímos os notebooks por DAGs no **Airflow**, o PostGIS local pelo **BigQuery** (para processamento massivo distribuído) e o dbt passou a gerenciar a linhagem e os testes de conformidade.
+*   **Fase 1 (Legado):** O fluxo dependia de **Jupyter Notebooks** e scripts de scraping instáveis para extrair dados do SIGEF e IBAMA. Usando **Python (pandas/geopandas)**, as transformações esbarravam em limites de memória local e os dados iam para o **DBeaver/PostGIS** para cruzamentos espaciais manuais.
+*   **Fase 2 (Atual - O Nascimento do Caipora):** Para ganhar escala e governança corporativa, o sistema foi refatorado para uma arquitetura de **Data Lakehouse**, sendo batizado de **Caipora Sentinela**. Substituímos os notebooks por DAGs no **Airflow**, o PostGIS local pelo **BigQuery** (para processamento massivo distribuído) e o dbt passou a gerenciar a linhagem e os testes de conformidade.
 
 ## 🎯 O Problema de Negócio
 
-Para garantir a integridade dos créditos de carbono, combater o *Greenwashing* e mitigar riscos na cadeia de suprimentos, o sistema automatiza a resposta para:
+Para garantir a integridade dos créditos de carbono, combater o *Greenwashing* e mitigar riscos na cadeia de suprimentos, o motor do Caipora Sentinela automatiza a resposta para:
 
 1.  **Risco Social e Direitos Humanos:** Proprietários ou polígonos na "Lista Suja" de trabalho análogo à escravidão (MTE).
 2.  **Proteção de Territórios Sensíveis:** Sobreposição com Terras Indígenas (FUNAI) ou Quilombolas (INCRA).
@@ -45,7 +45,7 @@ O projeto processa dados de múltiplas fontes governamentais (SIGEF, CAR, IBAMA,
 
 ## 🧪 Qualidade de Dados e Test-Driven Data Engineering
 
-O sistema conta com mais de 60 testes automatizados via **dbt tests**:
+o motor do Caipora Sentinela conta com mais de 60 testes automatizados via **dbt tests**:
 
 ### 1. Testes de Integridade Espacial e Satélite
 *   `accepted_range`: Garante que o NDVI esteja entre -1 e 1 e a inclinação entre 0 e 90°.
