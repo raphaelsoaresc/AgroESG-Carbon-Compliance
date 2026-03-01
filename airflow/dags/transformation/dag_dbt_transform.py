@@ -37,7 +37,7 @@ with DAG(
     start_date=datetime(2024, 1, 1),
     catchup=False,
     is_paused_upon_creation=True,
-    max_active_tasks=1, 
+    max_active_tasks=3, 
     max_active_runs=1,
     tags=["dbt", "gold", "silver", "esg"],
 ) as dag:
