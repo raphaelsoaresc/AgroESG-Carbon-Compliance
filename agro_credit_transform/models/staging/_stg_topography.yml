@@ -1,0 +1,56 @@
+version: 2
+
+models:
+  - name: stg_property_topography
+    description: >
+      Dados processados de relevo (SRTM), altitude e vegetação (Sentinel-2) 
+      extraídos via Google Earth Engine. Esta camada de staging padroniza 
+      as métricas físicas da propriedade.
+    columns:
+      - name: property_id
+        description: "ID único da propriedade (Recibo CAR)."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: max_slope_degrees
+        description: "Maior inclinação (declividade) detectada dentro do polígono."
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 90
+
+      - name: avg_slope_degrees
+        description: "Inclinação média da área total da propriedade."
+        data_tests:
+          - not_null
+
+      - name: relief_classification
+        description: "Classificação do relevo baseada na média (Padrão Embrapa)."
+        data_tests:
+          - accepted_values:
+              values: ['PLANO', 'SUAVE ONDULADO', 'ONDULADO', 'FORTE ONDULADO', 'MONTANHOSO/ESCARPADO']
+
+      - name: ndvi_mean
+        description: "Média do índice de vegetação (NDVI) nos últimos 90 dias."
+        data_tests:
+          # O NDVI pode ser nulo em casos de cobertura de nuvens persistente
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 1
+
+      - name: is_high_slope_risk
+        description: "Flag indicando se a declividade máxima ultrapassa 45 graus (Risco de APP)."
+        data_tests:
+          - not_null
+
+      - name: is_critical_environmental_violation
+        description: "Flag indicando violações críticas detectadas no processamento."
+        data_tests:
+          - not_null
+
+      - name: processed_at
+        description: "Timestamp da extração dos dados de satélite."
+        data_tests:
+          - not_null

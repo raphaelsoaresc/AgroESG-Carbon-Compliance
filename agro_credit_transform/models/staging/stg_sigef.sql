@@ -53,3 +53,4 @@ SELECT
     * EXCEPT(row_num)
 FROM deduplicated
 WHERE row_num = 1
+    AND property_id IS NOT NULL

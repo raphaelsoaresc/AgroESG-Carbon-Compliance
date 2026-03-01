@@ -1,0 +1,65 @@
+version: 2
+
+models:
+  - name: stg_car_properties
+    description: "Propriedades do CAR com áreas filtradas e geometrias em WKT."
+    columns:
+      - name: property_id
+        data_tests:
+          - unique
+          - not_null
+      - name: area_ha
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0" # Filtro já aplicado no SQL
+      - name: status_code
+        description: "Código do status da propriedade (ind_status no raw)."
+
+  - name: stg_ibama
+    description: "Histórico de embargos do IBAMA em MT com limpeza de tax_id e coordenadas."
+    columns:
+      - name: tax_id
+        description: "CPF/CNPJ do embargado limpo (sem pontuação)."
+      - name: embargo_date
+        data_tests:
+          - not_null
+      - name: reported_area_ha
+        description: "Área embargada convertida para FLOAT64."
+      - name: is_active_embargo
+        description: "Flag booleana indicando se o embargo ainda é vigente."
+
+  - name: stg_mte_slave_labor
+    description: "Lista Suja do Trabalho Escravo com normalização de datas e documentos."
+    columns:
+      - name: tax_id
+        description: "CPF/CNPJ do infrator limpo."
+        data_tests:
+          - not_null
+      - name: employer_name
+        description: "Nome do empregador em UPPER CASE."
+      - name: inclusion_date
+        data_tests:
+          - not_null
+
+  - name: stg_sigef
+    description: "Certificações fundiárias do SIGEF deduplicadas por imóvel."
+    columns:
+      - name: property_id
+        data_tests:
+          - unique
+          - not_null
+      - name: parcel_id
+        description: "ID único da parcela certificada."
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_car_owners
+    description: "Metadados de inscrição e retificação do CAR vindos da tabela de temas ambientais."
+    columns:
+      - name: property_id
+        data_tests:
+          - unique
+          - not_null
+      - name: registration_status
+        description: "Situação do cadastro (Ativo, Pendente, etc)."
