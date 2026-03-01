@@ -1,14 +1,9 @@
-# Name your project! Project names should contain only lowercase characters
-# and underscores.
 name: 'agro_credit_transform'
 version: '1.0.0'
 config-version: 2
 
-# This setting configures which "profile" dbt uses for this project.
-# Deve ser igual ao nome que está no topo do seu ~/.dbt/profiles.yml
 profile: 'agro_credit_transform'
 
-# These configurations specify where dbt should look for different types of files.
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
@@ -16,28 +11,41 @@ seed-paths: ["seeds"]
 macro-paths: ["macros"]
 snapshot-paths: ["snapshots"]
 
-clean-targets:         # directories to be removed by `dbt clean`
+clean-targets:
   - "target"
   - "dbt_packages"
 
-# Configuring models
-# Full documentation: https://docs.getdbt.com/docs/configuring-models
+# ---------------------------------------------------------------
+# 1. VARIÁVEIS GLOBAIS (Onde a mágica acontece)
+# ---------------------------------------------------------------
+vars:
+  # Data do Marco Temporal (Código Florestal)
+  forest_code_threshold_date: '2008-07-22'
+  
+  # Limite de tolerância para ruído de GPS/GIS (em hectares)
+  gis_noise_ha_threshold: 0.1
+  
+  # Limite de tolerância percentual (0.005 = 0.5% da área da propriedade)
+  gis_noise_pct_threshold: 0.005
+
+# ---------------------------------------------------------------
+# 2. CONFIGURAÇÃO DOS MODELOS
+# ---------------------------------------------------------------
 models:
   agro_credit_transform:
     +materialized: view
     
-    # Pasta staging -> Grava no dataset 'agro_esg_staging'
+    # Camada de Limpeza e Padronização
     staging:
       +schema: agro_esg_staging
       +materialized: view
 
-    # Pasta intermediate -> (Você não listou esse dataset, sugiro criar 'agro_esg_intermediate')
-    # Se não quiser criar agora, pode jogar na staging também, mas o ideal é separar.
+    # Camada de Transformação e Joins Complexos
     intermediate:
-      +schema: agro_esg_intermediate  # Temporário, ou crie o dataset 'agro_esg_intermediate'
-      +materialized: table
+      +schema: agro_esg_intermediate
+      +materialized: table # Recomendado table para performance em joins espaciais
 
-    # Pasta marts -> Grava no dataset 'agro_esg_marts'
+    # Camada de Negócio e Consumo (Dashboards/API)
     marts:
       +schema: agro_esg_marts
       +materialized: table

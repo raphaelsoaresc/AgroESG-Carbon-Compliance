@@ -64,7 +64,7 @@ with DAG(
         return records['grid_id'].tolist() if not records.empty else []
 
     # --- TAREFA 2: O PROCESSADOR (GEE -> GCS) ---
-    @task(pool='gee_api_pool', max_active_tis_per_dag=15)
+    @task(pool='gee_api_pool', max_active_tis_per_dag=8)
     def process_grid_satellite(grid_id: str):
         logging.info(f"Iniciando missão de satélite (Relevo + NDVI) para o {grid_id}")
         
