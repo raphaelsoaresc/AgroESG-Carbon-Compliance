@@ -1,20 +1,22 @@
 version: 2
 
 models:
-  - name: fct_compliance_risk # Certifique-se que o nome aqui bate com o nome do seu arquivo .sql
-    description: "Mart final de conformidade socioambiental (CAR) integrando riscos Ambientais (IBAMA) e Sociais (MTE/Slave Labor)."
+  - name: fct_compliance_risk
+    description: "Mart final de conformidade socioambiental (CAR) integrando riscos Ambientais, Sociais e monitoramento de Satélite (Ground Truth)."
     
     # 1. TESTES DE NÍVEL DE MODELO (Integridade das Regras de Negócio)
     data_tests:
       - dbt_utils.expression_is_true:
-          # Garante que nada saia como ELIGIBLE se houver embargo ambiental significativo
           expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND embargo_area_ha > 0.1)"
           name: "check_eligible_properties_environmental_limit"
       
       - dbt_utils.expression_is_true:
-          # NOVO: Garante que nada saia como ELIGIBLE se houver risco de trabalho escravo
           expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND slave_labor_overlap_ha > 0.1)"
           name: "check_eligible_properties_social_limit"
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND is_satellite_violation = TRUE)"
+          name: "check_eligible_properties_satellite_limit"
 
     columns:
       - name: property_alias
@@ -24,7 +26,7 @@ models:
           - not_null
 
       - name: final_eligibility_status
-        description: "Status final de elegibilidade após regras de bioma, embargo, trabalho escravo e contaminação."
+        description: "Status final de elegibilidade após regras declaratórias e de satélite."
         data_tests:
           - accepted_values:
               values:
@@ -33,26 +35,54 @@ models:
                 - 'CONDITIONAL - LEGAL RESERVE DEFICIT (REQUIRES PRA)'
                 - 'NOT ELIGIBLE - PROTECTED AREA INVASION'
                 - 'NOT ELIGIBLE - IBAMA EMBARGO (POST-2008)'
-                - 'NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)' # <--- NOVO STATUS ADICIONADO
+                - 'NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)'
                 - 'WARNING - PRE-2008 EMBARGO (MONITORING REQUIRED)'
                 - 'NOT ELIGIBLE - DATA INCONSISTENCY (EMBARGO > AREA)'
                 - 'WARNING - MICRO EMBARGO (REVIEW REQUIRED)'
+                # ---- STATUS DE SATÉLITE (GEE / SENTINEL) ----
+                - 'INFO - AWAITING SATELLITE CLEARANCE (HIGH CLOUDS)'
+                - 'WARNING - SATELLITE ALERT: POTENTIAL DEFORESTATION (REVIEW REQUIRED)'
+                - 'WARNING - SATELLITE ALERT: APP SLOPE VIOLATION'
+                - 'NOT ELIGIBLE - SATELLITE ALERT (DEFORESTATION ON HIGH SLOPE)'
 
-      - name: slave_labor_overlap_ha # <--- NOVA COLUNA DOCUMENTADA
-        description: "Área de sobreposição com polígonos vinculados a trabalho escravo (via SIGEF)."
+      # ---- TESTES DE QUALIDADE E MÉTRICAS DE SATÉLITE ----
+      - name: max_slope_degrees
+        description: "Inclinação máxima detectada pelo SRTM (Digital Elevation Model)."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 90
+
+      - name: ndvi_mean
+        description: "Média de índice de vegetação (NDVI) detectada pelo Sentinel-2."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 1
+
+      - name: is_satellite_violation
+        description: "Flag booleana que indica se houve detecção de desmatamento ou infração via satélite."
+        data_tests:
+          - not_null
+
+      # ---- MÉTRICAS SOCIAIS E AMBIENTAIS (SIGEF/IBAMA) ----
+      - name: slave_labor_overlap_ha
+        description: "Área de sobreposição com polígonos vinculados a trabalho escravo."
         data_tests:
           - dbt_utils.expression_is_true:
               expression: ">= 0"
 
-      - name: slave_labor_offender # <--- NOVA COLUNA DOCUMENTADA
+      - name: slave_labor_offender
         description: "Nome do infrator identificado na Lista Suja do MTE."
 
       - name: property_area_ha
+        description: "Área total da propriedade em hectares."
         data_tests:
           - dbt_utils.expression_is_true:
               expression: "> 0"
 
       - name: embargo_area_ha
+        description: "Área total embargada dentro do imóvel."
         data_tests:
           - dbt_utils.expression_is_true:
               expression: ">= 0"

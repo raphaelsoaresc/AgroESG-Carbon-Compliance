@@ -56,7 +56,16 @@ SELECT
     ((COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0)) - (p.area_ha * b.legal_reserve_perc)) as rl_balance_ha,
     
     CASE 
-        WHEN ((COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0)) - (p.area_ha * b.legal_reserve_perc)) >= -0.1 THEN 'COMPLIANT'
+        -- 1. Se não encontrou bioma (ex: fora da área de cobertura), fica pendente de análise
+        WHEN b.biome_name IS NULL THEN 'PENDENTE'
+        
+        -- 2. Se o saldo for positivo além da margem de 100m², é Superávit
+        WHEN ((COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0)) - (p.area_ha * b.legal_reserve_perc)) > 0.1 THEN 'SURPLUS'
+        
+        -- 3. Se estiver dentro da margem (pelo menos -0.1), é Regular
+        WHEN ((COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0)) - (p.area_ha * b.legal_reserve_perc)) >= -0.1 THEN 'REGULAR'
+        
+        -- 4. Caso contrário, é Déficit
         ELSE 'DEFICIT'
     END as rl_status
 

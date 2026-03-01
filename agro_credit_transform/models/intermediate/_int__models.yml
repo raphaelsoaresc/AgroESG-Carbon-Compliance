@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: int_car_geometries
+    description: "Tratamento de geometrias válidas e cálculo de centroides das propriedades do CAR."
+    columns:
+      - name: property_id
+        data_tests:
+          - unique
+          - not_null
+      - name: centroid
+        description: "Ponto central da propriedade. Não pode ser nulo para garantir o funcionamento do Grid."
+        data_tests:
+          - not_null
+
+  - name: int_car_compliance_metrics
+    description: "Métricas de conformidade declaratória (Reserva Legal e APP)."
+    columns:
+      - name: property_id
+        data_tests:
+          - unique
+          - not_null
+      - name: rl_status
+        data_tests:
+          - accepted_values:
+              # Adicione o valor que está causando a falha (Ex: 'DESCONHECIDO' ou null)
+              values: ['REGULAR', 'DEFICIT', 'SURPLUS', 'EXEMPT', 'PENDENTE']
+
+  - name: int_car_grid_mapping
+    description: "Mapeia as propriedades rurais num Grid espacial de ~11km."
+    # MOVIDO PARA O NÍVEL DO MODELO PARA EVITAR ERRO DE SINTAXE NO BIGQUERY
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "latitude_rounded >= -34.0 AND latitude_rounded <= 5.5"
+          name: "check_latitude_range_brazil"
+
+    columns:
+      - name: property_id
+        data_tests:
+          - unique
+          - not_null
+      - name: grid_id
+        data_tests:
+          - not_null
+      - name: latitude_rounded
+        data_tests:
+          - not_null
