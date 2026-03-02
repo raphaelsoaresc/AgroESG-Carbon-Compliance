@@ -23,7 +23,7 @@ with DAG(
     'satellite_app_auditor_pipeline',
     default_args=default_args,
     description='Auditoria Cirúrgica de NDVI em APPs Hídricas (Versão Robusta)',
-    schedule_interval='@daily',
+    schedule_interval=timedelta(minutes=30),
     catchup=False,
     tags=['satellite', 'gee', 'app', 'compliance', 'medallion'],
 ) as dag:
@@ -51,14 +51,14 @@ with DAG(
                 LEFT JOIN `{project_id}.{dataset_id}.{table_id}` t2 
                     ON t1.grid_id = t2.grid_id
                 WHERE t2.grid_id IS NULL
-                LIMIT 50
+                LIMIT 1000
             """
         else:
             logging.info(f"Tabela {table_id} não existe. Processando carga total...")
             sql = f"""
                 SELECT DISTINCT grid_id 
                 FROM `{project_id}.agro_esg_intermediate.int_car_grid_mapping` 
-                LIMIT 50
+                LIMIT 1000
             """
         
         records = hook.get_pandas_df(sql, dialect='standard')
