@@ -28,6 +28,13 @@ vars:
   # Limite de tolerância percentual (0.005 = 0.5% da área da propriedade)
   gis_noise_pct_threshold: 0.005
 
+  # --- OTIMIZAÇÃO ESPACIAL (Bounding Box para Mato Grosso) ---
+  # Isso acelera drasticamente o ST_INTERSECTSBOX nos modelos de compliance
+  bbox_min_lon: -62.0  # Oeste do MT
+  bbox_max_lon: -46.0  # Leste do MT
+  bbox_min_lat: -18.5  # Sul do MT
+  bbox_max_lat: -7.0   # Norte do MT
+
 # ---------------------------------------------------------------
 # 2. CONFIGURAÇÃO DOS MODELOS
 # ---------------------------------------------------------------
@@ -35,17 +42,17 @@ models:
   agro_credit_transform:
     +materialized: view
     
-    # Camada de Limpeza e Padronização
+    # Camada de Limpeza e Padronização (Raw -> Staging)
     staging:
       +schema: agro_esg_staging
       +materialized: view
 
-    # Camada de Transformação e Joins Complexos
+    # Camada de Transformação e Joins Complexos (Cruzamentos Espaciais)
     intermediate:
       +schema: agro_esg_intermediate
       +materialized: table # Recomendado table para performance em joins espaciais
 
-    # Camada de Negócio e Consumo (Dashboards/API)
+    # Camada de Negócio e Consumo (Dashboards/API/Relatórios)
     marts:
       +schema: agro_esg_marts
       +materialized: table

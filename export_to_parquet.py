@@ -15,7 +15,7 @@ def export():
     """
     
     print("🛰️ Baixando e simplificando dados no BigQuery...")
-    df = client.query(query).to_dataframe()
+    df = client.query(query).to_dataframe(create_bqstorage_client=False)
 
     # --- LIMPEZA DE TIPOS ---
     for col in df.columns:

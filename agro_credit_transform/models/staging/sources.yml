@@ -75,3 +75,12 @@ sources:
 
       - name: ibge_bc250_app_zones
         description: "Zonas de APP de massas d'água (lagos/represas) da BC250."
+
+      - name: raw_ee_app_ndvi
+        description: "NDVI cirúrgico das zonas de APP (margens de rios) via GEE."
+        columns:
+          - name: property_id
+            tests:
+              - not_null
+          - name: app_ndvi_mean
+            description: "Média do NDVI apenas na área de APP recortada."
