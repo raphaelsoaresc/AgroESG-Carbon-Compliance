@@ -1,5 +1,5 @@
 name: 'agro_credit_transform'
-version: '1.0.0'
+version: '1.2.0' # Atualizado para refletir a integração do MapBiomas
 config-version: 2
 
 profile: 'agro_credit_transform'
@@ -20,9 +20,12 @@ clean-targets:
 # ---------------------------------------------------------------
 vars:
   # Data do Marco Temporal (Código Florestal)
+  # ATENÇÃO: Esta data controla o filtro do "Grande Juiz" (MapBiomas).
+  # Alertas antes desta data são ignorados; após, geram bloqueio.
   forest_code_threshold_date: '2008-07-22'
   
   # Limite de tolerância para ruído de GPS/GIS (em hectares)
+  # Usado para ignorar micro-sobreposições ou erros de digitalização
   gis_noise_ha_threshold: 0.1
   
   # Limite de tolerância percentual (0.005 = 0.5% da área da propriedade)
@@ -40,19 +43,24 @@ vars:
 # ---------------------------------------------------------------
 models:
   agro_credit_transform:
+    # Configuração padrão para todos os modelos
     +materialized: view
     
     # Camada de Limpeza e Padronização (Raw -> Staging)
     staging:
       +schema: agro_esg_staging
       +materialized: view
+      +tags: ["bronze", "staging"]
 
     # Camada de Transformação e Joins Complexos (Cruzamentos Espaciais)
+    # Materialized table é CRUCIAL aqui para performance dos joins espaciais
     intermediate:
       +schema: agro_esg_intermediate
-      +materialized: table # Recomendado table para performance em joins espaciais
+      +materialized: table 
+      +tags: ["silver", "intermediate"]
 
     # Camada de Negócio e Consumo (Dashboards/API/Relatórios)
     marts:
       +schema: agro_esg_marts
       +materialized: table
+      +tags: ["gold", "marts", "bi"]
