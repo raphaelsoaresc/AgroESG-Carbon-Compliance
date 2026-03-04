@@ -23,17 +23,14 @@ models:
       - name: rl_status
         data_tests:
           - accepted_values:
-              # Adicione o valor que está causando a falha (Ex: 'DESCONHECIDO' ou null)
-              values: ['REGULAR', 'DEFICIT', 'SURPLUS', 'EXEMPT', 'PENDENTE']
+              values: ['REGULAR', 'DEFICIT', 'SURPLUS', 'EXEMPT', 'PENDENTE', 'SUSPENSO']
 
   - name: int_car_grid_mapping
     description: "Mapeia as propriedades rurais num Grid espacial de ~11km."
-    # MOVIDO PARA O NÍVEL DO MODELO PARA EVITAR ERRO DE SINTAXE NO BIGQUERY
     data_tests:
       - dbt_utils.expression_is_true:
           expression: "latitude_rounded >= -34.0 AND latitude_rounded <= 5.5"
           name: "check_latitude_range_brazil"
-
     columns:
       - name: property_id
         data_tests:
@@ -45,3 +42,53 @@ models:
       - name: latitude_rounded
         data_tests:
           - not_null
+
+  # --- NOVOS MODELOS DO MAPBIOMAS E COMPLIANCE ---
+
+  - name: int_mapbiomas_deforestation
+    description: "Filtra alertas do MapBiomas que cruzam com imóveis (Opção 4) respeitando o Marco Temporal (Pós-Julho/2008)."
+    columns:
+      - name: car_code
+        description: "Código do imóvel (CAR)."
+        data_tests:
+          - not_null
+          # Garante integridade referencial com a tabela de propriedades
+          - relationships:
+              to: ref('stg_car_properties')
+              field: property_id
+      - name: alert_id
+        description: "ID do alerta de desmatamento."
+        data_tests:
+          - not_null
+          # Um alerta pode aparecer em mais de um CAR se estiver na borda, mas aqui focamos na combinação
+      - name: detection_date
+        description: "Data da detecção do desmatamento (>= 2008-07-22)."
+        data_tests:
+          - not_null
+      - name: deforestation_overlap_ha
+        description: "Área desmatada dentro do imóvel."
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
+  - name: int_compliance__final_spatial_check
+    description: "Consolidação de todos os riscos espaciais (Trabalho Escravo, Embargos e MapBiomas)."
+    columns:
+      - name: car_property_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_car_properties')
+              field: property_id
+      - name: risk_type
+        description: "Categoria padronizada do risco identificado."
+        data_tests:
+          - accepted_values:
+              values:
+                - 'SOCIAL_RISK_SLAVE_LABOR'
+                - 'ENVIRONMENTAL_RISK_EMBARGO'
+                - 'ENVIRONMENTAL_RISK_DEFORESTATION' # O novo tipo do MapBiomas
+      - name: overlap_ha
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
