@@ -21,6 +21,12 @@ models:
           expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND max_slope_degrees > 45)"
           name: "check_eligible_properties_satellite_limit"
 
+      # NOVO TESTE: REGRA DO GRANDE JUIZ (MAPBIOMAS)
+      - dbt_utils.expression_is_true:
+          # Se for ELIGIBLE, não pode ter desmatamento confirmado pós-2008
+          expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND mapbiomas_deforested_ha > 0.1)"
+          name: "check_eligible_properties_mapbiomas_limit"
+
     columns:
       - name: area_ha
         data_tests:
@@ -37,11 +43,20 @@ models:
         data_tests:
           - accepted_values:
               values: [
-                'ELIGIBLE', 'NOT ELIGIBLE - SOCIAL', 'NOT ELIGIBLE - TRADITIONAL TERRITORY',
-                'NOT ELIGIBLE - CAR STATUS', 'NOT ELIGIBLE - IBAMA AMAZON (CMN 5.081)',
-                'NOT ELIGIBLE - IBAMA', 'NOT ELIGIBLE - CONSERVATION UNIT',
-                'NOT ELIGIBLE - SATELLITE', 'AWAITING CLEARANCE', 'WARNING - OLD EMBARGO',
-                'WARNING - RISK BY ADJACENCY', 'CONDITIONAL - RL DEFICIT'
+                'ELIGIBLE', 
+                'NOT ELIGIBLE - SOCIAL', 
+                'NOT ELIGIBLE - TRADITIONAL TERRITORY',
+                'NOT ELIGIBLE - CAR STATUS', 
+                'NOT ELIGIBLE - IBAMA AMAZON (CMN 5.081)',
+                'NOT ELIGIBLE - IBAMA', 
+                'NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)', # <--- NOVO STATUS ADICIONADO
+                'NOT ELIGIBLE - CONSERVATION UNIT',
+                'NOT ELIGIBLE - SATELLITE',
+                'WARNING - BORDERLINE SLOPE', 
+                'AWAITING CLEARANCE', 
+                'WARNING - OLD EMBARGO',
+                'WARNING - RISK BY ADJACENCY', 
+                'CONDITIONAL - RL DEFICIT'
               ]
 
       # ---- TESTES DE QUALIDADE E MÉTRICAS DE SATÉLITE ----
@@ -62,6 +77,12 @@ models:
       # ---- MÉTRICAS AMBIENTAIS E ESPACIAIS ----
       - name: embargo_area_ha
         description: "Área total embargada dentro do imóvel."
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+
+      - name: mapbiomas_deforested_ha
+        description: "Área desmatada confirmada pelo MapBiomas após Julho/2008."
         data_tests:
           - dbt_utils.expression_is_true:
               expression: ">= 0"
