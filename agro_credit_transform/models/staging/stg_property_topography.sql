@@ -66,8 +66,9 @@ processed_data AS (
             WHEN avg_slope_degrees <= 3 THEN 'PLANO'
             WHEN avg_slope_degrees <= 8 THEN 'SUAVE ONDULADO' 
             WHEN avg_slope_degrees <= 20 THEN 'ONDULADO'
-            WHEN avg_slope_degrees <= 45 THEN 'FORTE ONDULADO' 
-            ELSE 'MONTANHOSO/ESCARPADO'
+            WHEN avg_slope_degrees <= 45 THEN 'FORTE ONDULADO'
+            WHEN avg_slope_degrees <= 75 THEN 'MONTANHOSO'
+            ELSE 'ESCARPADO'
         END as relief_classification
 
     FROM raw_satellite_data

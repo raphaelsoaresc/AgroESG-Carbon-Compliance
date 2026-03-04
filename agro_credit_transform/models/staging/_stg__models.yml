@@ -28,6 +28,64 @@ models:
       - name: is_active_embargo
         description: "Flag booleana indicando se o embargo ainda é vigente."
 
+  - name: stg_mapbiomas_alertas
+    description: "Alertas de desmatamento validados (Opção 3). A fonte da verdade para geometria e data."
+    columns:
+      - name: alert_id
+        description: "ID único do alerta."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: detection_date
+        description: "Data da detecção. CRUCIAL para a regra do Marco Temporal (Jul/2008)."
+        data_tests:
+          - not_null
+
+      - name: alert_area_ha
+        description: "Área do desmatamento em hectares."
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
+      - name: geometry
+        description: "Geometria do polígono (GEOGRAPHY)."
+        data_tests:
+          - not_null
+
+  - name: stg_mapbiomas_property_crossings
+    description: "Tabela de ligação (Bridge) entre Alertas e Imóveis (Opção 4)."
+    data_tests:
+      # Garante que não haja duplicidade do mesmo alerta no mesmo CAR
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - alert_id
+            - car_code
+    columns:
+      - name: alert_id
+        data_tests:
+          - not_null
+          # Garante que este ID existe na tabela de alertas (Integridade Referencial)
+          - relationships:
+              to: ref('stg_mapbiomas_alertas')
+              field: alert_id
+
+      - name: car_code
+        description: "Código do imóvel (CAR) limpo."
+        data_tests:
+          - not_null
+          # Garante que este CAR existe na sua base de propriedades
+          - relationships:
+              to: ref('stg_car_properties')
+              field: property_id
+
+      - name: overlap_area_ha
+        description: "Área de intersecção entre o alerta e o imóvel."
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0"
+
   - name: stg_mte_slave_labor
     description: "Lista Suja do Trabalho Escravo com normalização de datas e documentos."
     columns:

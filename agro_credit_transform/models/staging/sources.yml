@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: raw_data
-    description: "Landing Zone: Dados brutos de fontes externas (SIGEF, IBAMA, CAR, MTE, GEE) populados via Airflow/DuckDB."
+    description: "Landing Zone: Dados brutos de fontes externas (SIGEF, IBAMA, CAR, MTE, GEE, MapBiomas) populados via Airflow/DuckDB."
     project: "{{ env_var('GCP_PROJECT_ID') }}"
     dataset: agro_esg_raw
 
@@ -57,6 +57,27 @@ sources:
           - <<: *hash_control
           - name: wkt_geometry
             description: "Geometria convertida para EPSG:4326."
+
+      # --- MONITORAMENTO DE DESMATAMENTO (MAPBIOMAS - O GRANDE JUIZ) ---
+      - name: mapbiomas_alertas_shapes
+        description: "Opção 3: Polígonos de alertas validados. Fonte da verdade para geometria e data do desmatamento."
+        columns:
+          - <<: *hash_control
+          - name: geometry_wkt
+            description: "Geometria do alerta convertida de Shapefile para WKT via DuckDB."
+          - name: alertid
+            description: "ID único do alerta (Chave Primária)."
+            tests:
+              - not_null
+
+      - name: mapbiomas_alertas_car_sigef
+        description: "Opção 4: Tabela de ligação (Bridge) pré-processada pelo MapBiomas entre Alertas e Imóveis (CAR/SIGEF)."
+        columns:
+          - <<: *hash_control
+          - name: codsicar
+            description: "Código do imóvel no CAR (Chave de ligação com stg_car_properties)."
+          - name: alertid
+            description: "ID do alerta correspondente."
 
       # --- TERRITÓRIOS PROTEGIDOS E HIDROGRAFIA ---
       - name: funai_terras_indigenas  
