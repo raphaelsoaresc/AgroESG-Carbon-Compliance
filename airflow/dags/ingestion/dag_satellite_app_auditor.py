@@ -24,6 +24,7 @@ with DAG(
     default_args=default_args,
     description='Auditoria Cirúrgica de NDVI em APPs Hídricas (Versão Robusta)',
     schedule_interval=timedelta(minutes=30),
+    max_active_runs=1,
     catchup=False,
     tags=['satellite', 'gee', 'app', 'compliance', 'medallion'],
 ) as dag:
