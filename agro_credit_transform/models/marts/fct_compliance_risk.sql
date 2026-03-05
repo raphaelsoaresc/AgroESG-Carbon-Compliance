@@ -12,6 +12,9 @@ WITH properties AS (
     SELECT 
         UPPER(TRIM(g.property_id)) as property_id, 
         g.area_ha, 
+        -- 1. MUNICÍPIO: Adicionado aqui na fonte
+        
+        g.city, 
         TRIM(o.registration_status) as registration_status, 
         g.geometry, 
         g.centroid
@@ -62,7 +65,7 @@ embargo_check AS (
     GROUP BY 1
 ),
 
--- NOVO: O Grande Juiz (MapBiomas)
+-- 3. MAPBIOMAS: Lógica mantida (já estava correta para pegar o ID)
 mapbiomas_check AS (
     SELECT
         UPPER(TRIM(car_code)) as property_id,
@@ -98,13 +101,17 @@ full_context AS (
         sat.max_slope_degrees, sat.general_ndvi_mean, sat.app_ndvi_mean,
         sat.is_app_violation_risk, sat.alert_selective_deforestation_in_app,
         sat.app_vegetation_status, sat.general_vegetation_state,
-        c.biome_name, c.rl_status
+        c.biome_name, 
+        c.rl_status,
+        -- 2. RL DEFICIT: Trazendo os valores numéricos
+        c.rl_deficit_ha,
+        c.rl_balance_ha
     FROM properties p
     LEFT JOIN sicar_native_overlaps sn ON p.property_id = sn.property_id
     LEFT JOIN spatial_restrictions sr ON p.property_id = sr.property_id
     LEFT JOIN slave_labor_combined sl ON p.property_id = sl.property_id
     LEFT JOIN embargo_check e ON p.property_id = e.property_id
-    LEFT JOIN mapbiomas_check mb ON p.property_id = mb.property_id -- JOIN com MapBiomas
+    LEFT JOIN mapbiomas_check mb ON p.property_id = mb.property_id 
     LEFT JOIN satellite_data sat ON p.property_id = sat.property_id
     LEFT JOIN {{ ref('int_car_compliance_metrics') }} c ON p.property_id = c.property_id
 ),
@@ -138,13 +145,16 @@ final_analysis AS (
                 CASE WHEN slave_labor_match != 'NONE' THEN 'Trabalho Escravo' END,
                 CASE WHEN (embargo_area_ha > {{ gis_noise_ha }} AND embargo_date >= '{{ forest_code_date }}') THEN FORMAT('Embargo IBAMA (Bloqueio): %.2f ha', embargo_area_ha) END,
                 
-                -- EVIDÊNCIA MAPBIOMAS
+                -- EVIDÊNCIA MAPBIOMAS (Com ID)
                 CASE WHEN mapbiomas_deforested_ha > {{ gis_noise_ha }} THEN FORMAT('Desmatamento MapBiomas (Alerta %d): %.2f ha em %t', mapbiomas_alert_id, mapbiomas_deforested_ha, mapbiomas_date) END,
 
                 CASE WHEN (embargo_area_ha > {{ gis_noise_ha }} AND (embargo_date < '{{ forest_code_date }}' OR embargo_date IS NULL)) THEN FORMAT('Embargo Histórico (Aviso): %.2f ha', embargo_area_ha) END,
                 CASE WHEN total_protected_overlap_ha > {{ gis_noise_ha }} THEN 'Sobreposição em Área Protegida' END,
                 CASE WHEN app_vegetation_status = 'CLOUD_COVERED' THEN 'Análise de satélite obstruída por nuvens' END,
-                CASE WHEN rl_status = 'DEFICIT' THEN 'Déficit de Reserva Legal identificado' END,
+                
+                -- 2. RL DEFICIT: Evidência melhorada com valor numérico
+                CASE WHEN rl_status = 'DEFICIT' THEN FORMAT('Déficit de RL: %.2f ha', rl_deficit_ha) END,
+                
                 CASE WHEN max_slope_degrees > 45 AND max_slope_degrees <= 48 THEN FORMAT('Alerta de Declividade: %.2f°', max_slope_degrees) END
             ]) AS x WHERE x IS NOT NULL
         ), ' | ') as detailed_evidence_string,
@@ -172,7 +182,7 @@ contamination_risk AS (
           OR f2.internal_risks_found LIKE '%CAR_STATUS%'
           OR f2.internal_risks_found LIKE '%CMN_5081%'
           OR f2.internal_risks_found LIKE '%IBAMA%' 
-          OR f2.internal_risks_found LIKE '%MAPBIOMAS%' -- Adjacência também pega MapBiomas
+          OR f2.internal_risks_found LIKE '%MAPBIOMAS%' 
           OR f2.internal_risks_found LIKE '%CONSERVATION_UNIT%'
           OR f2.internal_risks_found LIKE '%SATELLITE%'
       )
@@ -184,6 +194,8 @@ SELECT
     CONCAT('Fazenda ', SUBSTR(TO_HEX(MD5(v.property_id)), 1, 12)) as property_alias,
     v.area_ha as property_area_ha,
     v.area_ha,
+    -- 1. MUNICÍPIO: Exposto no final
+    v.city,
     COALESCE(v.registration_status, 'ATIVO') as car_status,
     v.biome_name,
     
@@ -193,10 +205,7 @@ SELECT
         WHEN v.internal_risks_found LIKE '%CAR_STATUS%' THEN 'NOT ELIGIBLE - CAR STATUS'
         WHEN v.internal_risks_found LIKE '%CMN_5081%' THEN 'NOT ELIGIBLE - IBAMA AMAZON (CMN 5.081)'
         WHEN v.internal_risks_found LIKE '%IBAMA%' THEN 'NOT ELIGIBLE - IBAMA'
-        
-        -- STATUS FINAL DO MAPBIOMAS
         WHEN v.internal_risks_found LIKE '%MAPBIOMAS%' THEN 'NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)'
-
         WHEN v.internal_risks_found LIKE '%CONSERVATION_UNIT%' THEN 'NOT ELIGIBLE - CONSERVATION UNIT'
         WHEN v.internal_risks_found LIKE '%SATELLITE%' THEN 'NOT ELIGIBLE - SATELLITE'
         WHEN c.property_id IS NOT NULL THEN 'WARNING - RISK BY ADJACENCY'
@@ -224,9 +233,14 @@ SELECT
     v.embargo_area_ha,
     v.embargo_date,
     
-    -- Métricas MapBiomas na saída final
+    -- 3. MAPBIOMAS: Métricas e ID na saída final
     v.mapbiomas_deforested_ha,
     v.mapbiomas_date,
+    v.mapbiomas_alert_id,
+
+    -- 2. RL DEFICIT: Dados brutos na saída final
+    v.rl_deficit_ha,
+    v.rl_balance_ha,
 
     v.total_protected_overlap_ha as protected_area_overlap_ha,
     v.total_protected_overlap_ha as protected_overlap_ha,

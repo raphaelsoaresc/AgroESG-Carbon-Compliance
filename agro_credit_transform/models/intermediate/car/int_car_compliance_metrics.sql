@@ -52,8 +52,12 @@ SELECT
     b.legal_reserve_perc,
     (p.area_ha * b.legal_reserve_perc) as required_rl_ha,
     
-    -- Status de Compliance (Deficit/Superavit)
+    -- Status de Compliance (Saldo)
     ((COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0)) - (p.area_ha * b.legal_reserve_perc)) as rl_balance_ha,
+
+    -- NOVO: Coluna rl_deficit_ha adicionada explicitamente
+    -- Se o necessário for maior que o declarado, calcula a diferença. Senão, 0.
+    GREATEST(0, (p.area_ha * b.legal_reserve_perc) - (COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0))) as rl_deficit_ha,
     
     CASE 
         -- 1. Se não encontrou bioma (ex: fora da área de cobertura), fica pendente de análise
