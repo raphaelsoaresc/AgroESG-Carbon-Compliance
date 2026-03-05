@@ -24,7 +24,7 @@ with DAG(
     default_args=default_args,
     description='Auditoria Cirúrgica de NDVI em APPs Hídricas (Versão Robusta)',
     schedule_interval=timedelta(minutes=30),
-    max_active_runs=1,
+    max_active_runs=3,
     catchup=False,
     tags=['satellite', 'gee', 'app', 'compliance', 'medallion'],
 ) as dag:
@@ -52,21 +52,21 @@ with DAG(
                 LEFT JOIN `{project_id}.{dataset_id}.{table_id}` t2 
                     ON t1.grid_id = t2.grid_id
                 WHERE t2.grid_id IS NULL
-                LIMIT 1000
+                LIMIT 500
             """
         else:
             logging.info(f"Tabela {table_id} não existe. Processando carga total...")
             sql = f"""
                 SELECT DISTINCT grid_id 
                 FROM `{project_id}.agro_esg_intermediate.int_car_grid_mapping` 
-                LIMIT 1000
+                LIMIT 500
             """
         
         records = hook.get_pandas_df(sql, dialect='standard')
         return records['grid_id'].tolist() if not records.empty else []
 
     # --- TAREFA 2: PROCESSADOR ESPACIAL (GEE -> GCS) ---
-    @task(pool='gee_api_pool', max_active_tis_per_dag=10) # Reduzido para 10 para evitar concorrência excessiva
+    @task(pool='gee_api_pool', max_active_tis_per_dag=12) # Reduzido para 10 para evitar concorrência excessiva
     def process_app_satellite(grid_id: str):
         logging.info(f"Iniciando Auditoria de APP para o grid {grid_id}")
         
