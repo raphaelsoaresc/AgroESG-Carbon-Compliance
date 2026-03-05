@@ -53,6 +53,7 @@ dependencies = [
     { name = "astronomer-cosmos", extra = ["google"] },
     { name = "db-dtypes" },
     { name = "dbt-bigquery" },
+    { name = "dbterd" },
     { name = "duckdb" },
     { name = "earthengine-api" },
     { name = "fastapi" },
@@ -91,6 +92,7 @@ requires-dist = [
     { name = "astronomer-cosmos", extras = ["google"], specifier = ">=1.2.0" },
     { name = "db-dtypes", specifier = ">=1.5.0" },
     { name = "dbt-bigquery", specifier = ">=1.7.0" },
+    { name = "dbterd", specifier = ">=1.23.0" },
     { name = "duckdb", specifier = ">=1.0.0" },
     { name = "earthengine-api", specifier = ">=0.1.300" },
     { name = "fastapi", specifier = ">=0.131.0" },
@@ -1517,6 +1519,18 @@ wheels = [
 ]
 
 [[package]]
+name = "dbt-artifacts-parser"
+version = "0.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4a/5a/fa9f9227fdef03c969920a2d75f4552898f7643388df506d870d2e2be733/dbt_artifacts_parser-0.12.0.tar.gz", hash = "sha256:9d1c0ed41926102c1c39fdd780e1a332f58c9b794e94dba0dcf5dfefc847d6ea", size = 229564, upload-time = "2025-11-27T06:07:26.852Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/a7/1efa2adeea33e4942d4cf54593a4436a63fecb609684393b6b8a5dcc4197/dbt_artifacts_parser-0.12.0-py3-none-any.whl", hash = "sha256:3db93df7969c3f22c6fbf75a51b0af4c21b189d8db6f3c54e8471102c775bb0d", size = 234910, upload-time = "2025-11-27T06:07:25.268Z" },
+]
+
+[[package]]
 name = "dbt-bigquery"
 version = "1.9.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1645,6 +1659,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ba/1b/c7516c333db7a287fded9083209063731d9095e4958c9cda7c73b17178c7/dbt_semantic_interfaces-0.5.1.tar.gz", hash = "sha256:3a497abef1ba8112affdf804b26bfdcd5468ed95cc924b509068e18d371c7c4d", size = 76089, upload-time = "2024-03-21T21:48:16.793Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/31/31/ec1943c95ea18eabfcf7d6c882e7265e245f749dc465101343028eac33b8/dbt_semantic_interfaces-0.5.1-py3-none-any.whl", hash = "sha256:b95ff3a6721dc30f6278cb84933d95e0ef27766e67eeb6bb41906242e77f7c9b", size = 119672, upload-time = "2024-03-21T21:48:18.548Z" },
+]
+
+[[package]]
+name = "dbterd"
+version = "1.23.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "dbt-artifacts-parser" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c9/74/1242963e4c04a01487668d8e0516fe1a2f20b341f08b258c7cd206818efa/dbterd-1.23.0.tar.gz", hash = "sha256:5e883d67c4a40f9ebb5aa368c2547fd381e5cd7447e47d5e418f64d2027831d2", size = 52214, upload-time = "2025-12-14T04:17:57.111Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/81/791c00d190c863534edec69a5712140b12628f962c906561d283297013f9/dbterd-1.23.0-py3-none-any.whl", hash = "sha256:e8bf42626e59066801559d309db808af2db745751407a64bbb4aa95df14af42b", size = 69075, upload-time = "2025-12-14T04:17:55.5Z" },
 ]
 
 [[package]]
