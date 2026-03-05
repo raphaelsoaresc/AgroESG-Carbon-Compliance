@@ -1,6 +1,6 @@
 # 🌿 Caipora Sentinela | Motor de Compliance Geoespacial para o Agronegócio
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://agromarte.agrimarketintel.com/)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://caipora.agrimarketintel.com/)
 
 > **Status:** ✅ Orquestração (Airflow + Cosmos) | 🧠 Motor de Regras (dbt + BigQuery) | 🛰️ **Monitoramento MapBiomas (Alertas)** | 📊 Dashboard (Streamlit) | 🚀 API (FastAPI)
 
@@ -110,8 +110,10 @@ O motor do Caipora Sentinela conta com mais de **90 testes automatizados** via d
 *   [x] **Risco Social Avançado:** Algoritmo de **Fuzzy Matching** para geolocalizar infratores da "Lista Suja" do MTE no território.
 *   [x] **Territórios e APPs:** Intersecção espacial massiva contra FUNAI, INCRA e ANA.
 *   [x] **Ground Truth (Sensoriamento Remoto):** Detecção de anomalias de vegetação (NDVI Diferencial em APPs) e declividade via GEE.
-*   [x] **API & Serving:** Estruturação em FastAPI para consumo externo.
-*   [ ] **Visualização Avançada:** Ajustando API e Dashboard para integração final de upload de ativos e geração de relatórios de conformidade via consultas em tempo real (Em desenvolvimento).
+*   [x] **API & Serving:** Estruturação base em FastAPI implementada.
+*   [x] **Frontend & UX:** Dashboard interativo finalizado para upload de ativos e visualização de relatórios de conformidade.
+*   [ ] **Integração Full-Stack:** Ajustes finais nos endpoints da API para otimizar a comunicação com o Frontend em tempo real.
+*   [ ] **Escalabilidade Nacional:** Expansão da infraestrutura e dados para cobrir todo o território brasileiro.
 
 ---
 ## ⚖️ Licença
