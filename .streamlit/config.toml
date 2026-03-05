@@ -1,0 +1,10 @@
+[theme]
+base = "light"
+primaryColor = "#2EA043"        # Verde MapBiomas
+backgroundColor = "#F6F5F4"     # Cinza muito claro (Off-white) para o fundo
+secondaryBackgroundColor = "#EBEBEB" # Cinza claro para a Sidebar
+textColor = "#333333"           # Cinza escuro para texto (leitura confortável)
+font = "sans serif"
+
+[server]
+headless = true
