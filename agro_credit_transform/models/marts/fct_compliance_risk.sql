@@ -198,6 +198,7 @@ SELECT
     v.city,
     COALESCE(v.registration_status, 'ATIVO') as car_status,
     v.biome_name,
+    v.geometry,
     
     CASE 
         WHEN v.internal_risks_found LIKE '%SOCIAL%' THEN 'NOT ELIGIBLE - SOCIAL'
