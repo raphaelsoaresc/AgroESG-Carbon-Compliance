@@ -51,6 +51,7 @@ logs/
 # Adicionado: O formato que o DuckDB vai gerar
 *.parquet
 *.gz
+*.geoparquet
 data/raw/
 data/staging/
 data/archive/
