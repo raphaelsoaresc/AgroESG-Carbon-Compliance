@@ -10,6 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # (Certifique-se de ter rodado o script de exportação antes do docker build)
 COPY data_compliance.parquet .
 COPY app.py .
+COPY .streamlit ./.streamlit
+COPY assets ./assets
 
 EXPOSE 8501
 
