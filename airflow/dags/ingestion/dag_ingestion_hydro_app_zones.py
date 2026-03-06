@@ -185,7 +185,7 @@ with DAG(
                     "load": {
                         "sourceUris": [f"gs://{BUCKET_NAME}/bronze/hydro/{s_id}/" + "{{ ti.xcom_pull(task_ids='group_" + s_id + ".process_duckdb', key='output_filename') }}"],
                         "destinationTable": {"projectId": PROJECT_ID, "datasetId": DATASET_ID, "tableId": s_conf['table_id']},
-                        "sourceFormat": "PARQUET", "writeDisposition": "WRITE_TRUNCATE", "autodetect": True,
+                        "sourceFormat": "PARQUET", "writeDisposition": "WRITE_APPEND", "autodetect": True,
                     }
                 }
             )
