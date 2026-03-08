@@ -35,7 +35,7 @@ renamed_and_filtered AS (
         DES_STATUS_FORMULARIO as form_status,
         TIPO_AREA as area_type,
 
-        -- DATA: Garante o tipo DATE
+        -- DATA: Garante o tipo DATE (Lógica original de parsing)
         COALESCE(
             SAFE.PARSE_DATE('%d/%m/%Y', LEFT(TRIM(CAST(DAT_EMBARGO AS STRING)), 10)),
             SAFE.PARSE_DATE('%Y-%m-%d', LEFT(TRIM(CAST(DAT_EMBARGO AS STRING)), 10)),
@@ -67,6 +67,17 @@ renamed_and_filtered AS (
 
     FROM deduplicated
     WHERE row_num = 1
+),
+
+-- NOVA ETAPA: Tratamento de erros humanos na data
+final_cleaned AS (
+    SELECT
+        * EXCEPT(embargo_date), -- Seleciona tudo, exceto a data antiga
+        CASE 
+            WHEN embargo_date > CURRENT_DATE() THEN CURRENT_DATE()
+            ELSE embargo_date 
+        END AS embargo_date
+    FROM renamed_and_filtered
 )
 
-SELECT * FROM renamed_and_filtered
+SELECT * FROM final_cleaned

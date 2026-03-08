@@ -3,6 +3,7 @@
     schema='agro_esg_staging',
     unique_key='property_id',
     cluster_by=['property_id'],
+    on_schema_change='sync_all_columns',
     tags=['satellite', 'topography', 'ndvi', 'compliance']
 ) }}
 
