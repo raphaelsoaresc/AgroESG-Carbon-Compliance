@@ -52,6 +52,7 @@ models:
                 'NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)', # <--- NOVO STATUS ADICIONADO
                 'NOT ELIGIBLE - CONSERVATION UNIT',
                 'NOT ELIGIBLE - SATELLITE',
+                'NOT ELIGIBLE - EUDR VIOLATION (POST-2020)',
                 'WARNING - BORDERLINE SLOPE', 
                 'AWAITING CLEARANCE', 
                 'WARNING - OLD EMBARGO',

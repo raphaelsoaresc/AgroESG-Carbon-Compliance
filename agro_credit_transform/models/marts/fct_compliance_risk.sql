@@ -2,7 +2,7 @@
     materialized='table',
     schema='agro_esg_marts',
     cluster_by=['final_eligibility_status', 'biome_name'],
-    tags=['compliance', 'legal', 'cmn_5081']
+    tags=['compliance', 'legal', 'cmn_5081', 'eudr']
 ) }}
 
 {% set forest_code_date = var('forest_code_threshold_date', '2008-07-22') %}
@@ -13,7 +13,6 @@ WITH properties AS (
         UPPER(TRIM(g.property_id)) as property_id, 
         g.area_ha, 
         -- 1. MUNICÍPIO: Adicionado aqui na fonte
-        
         g.city, 
         TRIM(o.registration_status) as registration_status, 
         g.geometry, 
@@ -65,12 +64,14 @@ embargo_check AS (
     GROUP BY 1
 ),
 
--- 3. MAPBIOMAS: Lógica mantida (já estava correta para pegar o ID)
+-- 3. MAPBIOMAS: Ajuste solicitado (Página 3)
 mapbiomas_check AS (
     SELECT
         UPPER(TRIM(car_code)) as property_id,
         MAX(detection_date) as latest_deforestation_date,
         SUM(deforestation_overlap_ha) as total_deforested_ha,
+        -- NOVA LOGICA EUDR: Soma apenas o desmatamento pós-2020
+        SUM(CASE WHEN detection_date > '2020-12-31' THEN deforestation_overlap_ha ELSE 0 END) as eudr_deforested_ha,
         -- Pega o ID do alerta mais recente como evidência
         ARRAY_AGG(alert_id ORDER BY detection_date DESC LIMIT 1)[OFFSET(0)] as latest_alert_id
     FROM {{ ref('int_mapbiomas_deforestation') }}
@@ -95,6 +96,7 @@ full_context AS (
         
         -- MapBiomas Data
         COALESCE(mb.total_deforested_ha, 0) as mapbiomas_deforested_ha,
+        COALESCE(mb.eudr_deforested_ha, 0) as eudr_deforested_ha, -- Trazendo a coluna nova
         mb.latest_deforestation_date as mapbiomas_date,
         mb.latest_alert_id as mapbiomas_alert_id,
 
@@ -128,6 +130,9 @@ final_analysis AS (
                 CASE WHEN (biome_name LIKE 'AMAZ%NIA' AND embargo_area_ha > 0) THEN 'CMN_5081' END,
                 CASE WHEN (embargo_area_ha > {{ gis_noise_ha }} AND embargo_date >= '{{ forest_code_date }}') THEN 'IBAMA' END,
                 
+                -- REGRA EUDR (NOVA): Prioridade sobre MapBiomas genérico
+                CASE WHEN eudr_deforested_ha > {{ gis_noise_ha }} THEN 'EUDR' END,
+
                 -- REGRA DO GRANDE JUIZ: Se tem desmatamento MapBiomas > ruído, é bloqueio
                 CASE WHEN mapbiomas_deforested_ha > {{ gis_noise_ha }} THEN 'MAPBIOMAS' END,
 
@@ -145,6 +150,9 @@ final_analysis AS (
                 CASE WHEN slave_labor_match != 'NONE' THEN 'Trabalho Escravo' END,
                 CASE WHEN (embargo_area_ha > {{ gis_noise_ha }} AND embargo_date >= '{{ forest_code_date }}') THEN FORMAT('Embargo IBAMA (Bloqueio): %.2f ha', embargo_area_ha) END,
                 
+                -- EVIDÊNCIA EUDR
+                CASE WHEN eudr_deforested_ha > {{ gis_noise_ha }} THEN FORMAT('Violação EUDR (Pós-2020): %.2f ha', eudr_deforested_ha) END,
+
                 -- EVIDÊNCIA MAPBIOMAS (Com ID)
                 CASE WHEN mapbiomas_deforested_ha > {{ gis_noise_ha }} THEN FORMAT('Desmatamento MapBiomas (Alerta %d): %.2f ha em %t', mapbiomas_alert_id, mapbiomas_deforested_ha, mapbiomas_date) END,
 
@@ -182,6 +190,7 @@ contamination_risk AS (
           OR f2.internal_risks_found LIKE '%CAR_STATUS%'
           OR f2.internal_risks_found LIKE '%CMN_5081%'
           OR f2.internal_risks_found LIKE '%IBAMA%' 
+          OR f2.internal_risks_found LIKE '%EUDR%' -- Adicionado risco de contaminação EUDR
           OR f2.internal_risks_found LIKE '%MAPBIOMAS%' 
           OR f2.internal_risks_found LIKE '%CONSERVATION_UNIT%'
           OR f2.internal_risks_found LIKE '%SATELLITE%'
@@ -205,6 +214,12 @@ SELECT
         WHEN v.internal_risks_found LIKE '%TRADITIONAL_TERRITORY%' THEN 'NOT ELIGIBLE - TRADITIONAL TERRITORY'
         WHEN v.internal_risks_found LIKE '%CAR_STATUS%' THEN 'NOT ELIGIBLE - CAR STATUS'
         WHEN v.internal_risks_found LIKE '%CMN_5081%' THEN 'NOT ELIGIBLE - IBAMA AMAZON (CMN 5.081)'
+        
+        -- AJUSTE SOLICITADO (Página 7 e 8): Regra EUDR com prioridade
+        -- Usamos a coluna específica 'eudr_deforested_ha' para garantir que o bloqueio 
+        -- ocorra apenas se a área desmatada PÓS-2020 for maior que o ruído.
+        WHEN v.eudr_deforested_ha > {{ gis_noise_ha }} THEN 'NOT ELIGIBLE - EUDR VIOLATION (POST-2020)'
+        
         WHEN v.internal_risks_found LIKE '%IBAMA%' THEN 'NOT ELIGIBLE - IBAMA'
         WHEN v.internal_risks_found LIKE '%MAPBIOMAS%' THEN 'NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)'
         WHEN v.internal_risks_found LIKE '%CONSERVATION_UNIT%' THEN 'NOT ELIGIBLE - CONSERVATION UNIT'
@@ -236,6 +251,7 @@ SELECT
     
     -- 3. MAPBIOMAS: Métricas e ID na saída final
     v.mapbiomas_deforested_ha,
+    v.eudr_deforested_ha, -- Expondo a métrica EUDR
     v.mapbiomas_date,
     v.mapbiomas_alert_id,
 
