@@ -1,258 +1,243 @@
 import time
 import io
 import os
+import json
 import duckdb
 import pandas as pd
-import numpy as np  # <-- Adicionado para suportar np.nan
-from typing import List
+import numpy as np
+from typing import List, Optional, Union, Dict
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
 from google.cloud import storage
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
 # Importações dos seus schemas locais
-from schemas import (ComplianceResponse, CoordinatePoint, 
-                    BatchCoordinateRequest, CSVUploadResponse)
+from schemas import (
+    ComplianceResponse, CoordinatePoint, 
+    BatchCoordinateRequest, CSVUploadResponse,
+    EnvironmentalScore, DeforestationMetrics, SocialScore, RiskAnalysis
+)
 
 # --- CONFIGURAÇÕES ---
 class Settings(BaseSettings):
     max_csv_rows: int = 500
-    gcs_bucket_name: str = os.getenv("GCS_BUCKET_NAME", "nome-do-seu-bucket-aqui")
+    gcs_bucket_name: str 
     gcs_parquet_path: str = "api_data/fct_compliance_latest.parquet"
     local_parquet_path: str = "compliance_data.parquet"
     
-    model_config = {
-        "env_file": ".env",
-        "extra": "ignore" 
-    }
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 settings = Settings()
 db_con = None
 
-# --- LIFESPAN (STARTUP & SHUTDOWN) ---
+# --- NOVOS SCHEMAS DE ENTRADA E SAÍDA ---
+
+class HealthResponse(BaseModel):
+    status: str = Field(..., example="online")
+    engine: str = Field(..., example="DuckDB + Spatial")
+    version: str = Field(..., example="3.1.0")
+
+class PolygonRequest(BaseModel):
+    wkt: Optional[str] = Field(
+        None, 
+        description="Geometria em formato Well-Known Text (WKT)",
+        examples=["POLYGON((-48.5 -22.5, -48.4 -22.5, -48.4 -22.6, -48.5 -22.6, -48.5 -22.5))"]
+    )
+    geojson: Optional[Dict] = Field(
+        None, 
+        description="Geometria em formato GeoJSON",
+        examples=[{"type": "Point", "coordinates": [-48.5, -22.5]}]
+    )
+    reference_id: Optional[str] = Field(None, example="REF-123")
+
+# --- LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global db_con
-    print("🚀 Iniciando API - Preparando Motor Geoespacial...")
+    print("🚀 Iniciando API Caipora Sentinela...")
     
     local_file = settings.local_parquet_path
-    
-    print(f"☁️  Baixando gs://{settings.gcs_bucket_name}/{settings.gcs_parquet_path} ...")
-    try:
-        storage_client = storage.Client()
-        bucket = storage_client.bucket(settings.gcs_bucket_name)
-        blob = bucket.blob(settings.gcs_parquet_path)
-        blob.download_to_filename(local_file)
-        print(f"✅ Download concluído: {local_file}")
-    except Exception as e:
-        print(f"⚠️  Erro ao baixar do GCS: {e}")
-        if not os.path.exists(local_file):
-            print("❌ Arquivo local não encontrado. A API pode falhar nas consultas.")
+    if not os.path.exists(local_file):
+        try:
+            storage_client = storage.Client()
+            bucket = storage_client.bucket(settings.gcs_bucket_name)
+            blob = bucket.blob(settings.gcs_parquet_path)
+            blob.download_to_filename(local_file)
+            print(f"✅ Download concluído: {local_file}")
+        except Exception as e:
+            print(f"⚠️ Erro ao baixar do GCS: {e}")
 
     db_con = duckdb.connect(database=':memory:') 
-    print("🌍 Carregando extensão SPATIAL do DuckDB...")
     db_con.execute("INSTALL spatial; LOAD spatial;")
     
     if os.path.exists(local_file):
-        print(f"📂 Montando tabela 'compliance_data' a partir de {local_file}...")
-        db_con.execute(f"""
-            CREATE OR REPLACE VIEW compliance_data AS 
-            SELECT * FROM '{local_file}'
-        """)
-        
-        try:
-            count = db_con.execute("SELECT COUNT(*) FROM compliance_data").fetchone()[0]
-            print(f"✅ Motor pronto! {count:,} registros carregados.")
-        except Exception as e:
-            print(f"⚠️ Erro ao ler o arquivo Parquet: {e}")
+        db_con.execute(f"CREATE OR REPLACE VIEW compliance_data AS SELECT * FROM '{local_file}'")
+        print("✅ Tabela 'compliance_data' montada.")
     
     yield
-    print("🛑 Encerrando conexão DuckDB...")
     db_con.close()
 
-# --- APP SETUP ---
-app = FastAPI(
-    title="Caipora Sentinela API",
-    description="Monitoramento de Compliance Socioambiental e Risco de Crédito.",
-    version="3.0.0",
-    lifespan=lifespan
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="Caipora Sentinela API", version="3.1.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # --- FUNÇÕES AUXILIARES ---
-def map_row_to_response(row, reference_id=None):
-    status = row.get("final_eligibility_status", "UNKNOWN")
-    prop_alias = row.get("property_alias")
-    prop_name = prop_alias 
-    embargo_date = row.get("embargo_date") 
-    embargo_area = row.get("embargo_area_ha")
-    is_protected = bool(row.get("is_protected_area_overlap"))
 
-    return {
-        "reference_id": reference_id if reference_id else row.get("reference_id"),
-        "property_id": str(row.get("property_id", "")),
-        "property_name": prop_name if prop_name else "Não Informado",
-        "property_alias": prop_alias if prop_alias else "Sem Alias",
-        "total_area_ha": float(row.get("property_area_ha", 0) or 0),
-        "verdict": status,
-        "environmental_score": {
-            "biome": row.get("biome_name") or "Desconhecido",
-            "legal_reserve_required_pct": 0.0, 
-            "has_app_area": False, 
-            "critical_app_violation": "CRITICAL APP VIOLATION" in str(status),
-            "is_eudr_compliant": bool(row.get("is_eudr_compliant", False))
-        },
-        "social_score": {
-            "indigenous_land_overlap": is_protected,
-            "quilombola_land_overlap": False
-        },
-        "risk_analysis": {
-            "oldest_embargo_date": str(embargo_date) if embargo_date else None,
-            "total_embargoed_area_ha": float(embargo_area or 0),
-            "adjacency_contamination_risk": "CONTAMINATION" in str(status)
-        }
-    }
+def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceResponse:
+    """Mapeia uma linha do DuckDB para o schema ComplianceResponse completo."""
+    def clean(val, default=0.0):
+        if val is None or (isinstance(val, float) and np.isnan(val)):
+            return default
+        return val
 
-def _execute_batch_duckdb(points: List[CoordinatePoint]) -> List[dict]:
-    if not points:
-        return []
-
-    input_data = [
-        {"lat": float(p.lat), "lon": float(p.lon), "ref_id": str(p.reference_id)} 
-        for p in points
-    ]
-    input_df = pd.DataFrame(input_data)
-    
-    view_name = f"batch_input_{int(time.time()*1000)}"
-    db_con.register(view_name, input_df)
-    
-    query = f"""
-        SELECT 
-            target.*, 
-            src.ref_id as input_reference_id
-        FROM compliance_data AS target
-        JOIN {view_name} AS src 
-          ON ST_Contains(target.geometry, ST_Point(src.lon, src.lat))
-        QUALIFY ROW_NUMBER() OVER(
-            PARTITION BY src.ref_id 
-            ORDER BY target.property_area_ha DESC
-        ) = 1
-    """
-    
-    try:
-        results_df = db_con.execute(query).df()
+    return ComplianceResponse(
+        reference_id=reference_id or str(row.get("reference_id", "")),
+        property_id=str(row.get("property_id", "")),
+        property_name=str(row.get("property_alias") or "Não Informado"),
+        property_alias=str(row.get("property_alias") or "Sem Alias"),
+        total_area_ha=float(clean(row.get("property_area_ha"))),
+        verdict=str(row.get("final_eligibility_status", "UNKNOWN")),
+        city=str(row.get("city_name", "Não Informada")),
+        car_status=str(row.get("car_status", "ATIVO")),
+        max_slope_degrees=float(clean(row.get("max_slope", 0.0))),
         
-        # --- ALTERAÇÃO 1: Conversão exata solicitada ---
-        # Substitui NaNs e NaTs por None antes de converter para dicionário
-        results_df = results_df.replace({np.nan: None, pd.NaT: None})
-        # -----------------------------------------------
+        environmental_score=EnvironmentalScore(
+            biome=str(row.get("biome_name", "Desconhecido")),
+            legal_reserve_required_pct=float(clean(row.get("legal_reserve_required_pct"))),
+            has_app_area=bool(row.get("has_app", False)),
+            critical_app_violation=bool(row.get("has_app_violation", False)),
+            is_eudr_compliant=bool(row.get("is_eudr_compliant", False)),
+            general_ndvi_mean=float(clean(row.get("ndvi_mean"))),
+            app_ndvi_mean=float(clean(row.get("ndvi_app_mean"))),
+            rl_deficit_ha=float(clean(row.get("legal_reserve_deficit_ha"))),
+            rl_balance_ha=float(clean(row.get("legal_reserve_balance_ha")))
+        ),
         
-        response = []
-        for _, row in results_df.iterrows():
-            row_dict = row.to_dict()
-            response.append(map_row_to_response(row_dict, reference_id=row_dict.get('input_reference_id')))
-            
-        return response
+        deforestation_metrics=DeforestationMetrics(
+            mapbiomas_deforested_ha=float(clean(row.get("mapbiomas_deforested_ha"))),
+            eudr_deforested_ha=float(clean(row.get("eudr_deforested_ha"))),
+            mapbiomas_date=row.get("mapbiomas_alert_date"),
+            mapbiomas_alert_id=row.get("mapbiomas_alert_id")
+        ),
         
-    except Exception as e:
-        print(f"Erro na query DuckDB: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro no processamento espacial: {str(e)}")
-    finally:
-        db_con.execute(f"DROP VIEW IF EXISTS {view_name}")
+        social_score=SocialScore(
+            indigenous_land_overlap=bool(row.get("is_protected_area_overlap", False)),
+            quilombola_land_overlap=bool(row.get("is_quilombola_overlap", False)),
+            slave_labor_offender=bool(row.get("is_slave_labor", False))
+        ),
+        
+        risk_analysis=RiskAnalysis(
+            oldest_embargo_date=row.get("embargo_date"),
+            total_embargoed_area_ha=float(clean(row.get("embargo_area_ha"))),
+            adjacency_contamination_risk=bool(row.get("adjacency_risk", False)),
+            technical_evidence=row.get("technical_evidence"),
+            internal_risks_found=row.get("risk_summary"),
+            adjacency_details=row.get("adjacency_details")
+        )
+    )
 
 # --- ENDPOINTS ---
 
-@app.get("/health", tags=["Infrastructure"])
-async def health_check():
-    try:
-        db_con.execute("SELECT 1")
-        return {"status": "healthy", "engine": "DuckDB", "timestamp": time.time()}
-    except:
-        raise HTTPException(status_code=503, detail="Database not ready")
-
-@app.get("/compliance/point", response_model=ComplianceResponse, tags=["Compliance"])
-async def get_compliance_by_point(lat: float, lon: float):
+@app.get(
+    "/compliance/car/{car_code}", 
+    response_model=ComplianceResponse, 
+    tags=["Compliance"],
+    responses={404: {"description": "Código do CAR ou ID da propriedade não encontrado"}}
+)
+async def get_by_car(car_code: str):
+    """Busca exata por Código do CAR ou ID da Propriedade."""
     query = """
-        SELECT * 
-        FROM compliance_data 
-        WHERE ST_Contains(geometry, ST_Point(?, ?)) 
+        SELECT * FROM compliance_data 
+        WHERE property_id = ? OR property_alias = ? 
         LIMIT 1
     """
-    try:
-        result_df = db_con.execute(query, [lon, lat]).df()
-        
-        # --- ALTERAÇÃO 2: Conversão exata solicitada ---
-        result_df = result_df.replace({np.nan: None, pd.NaT: None})
-        # -----------------------------------------------
-        
-        if result_df.empty:
-            raise HTTPException(status_code=404, detail="Coordenada fora de áreas mapeadas.")
-        
-        row = result_df.iloc[0].to_dict()
-        return map_row_to_response(row)
-    except duckdb.Error as e:
-        raise HTTPException(status_code=500, detail=f"Erro interno DuckDB: {str(e)}")
+    result_df = db_con.execute(query, [car_code, car_code]).df()
+    if result_df.empty:
+        raise HTTPException(status_code=404, detail="Código do CAR não encontrado na base.")
+    
+    row = result_df.replace({np.nan: None}).iloc[0].to_dict()
+    return map_row_to_response(row)
 
-@app.post("/compliance/batch/points", response_model=List[ComplianceResponse], tags=["Compliance"])
-async def get_batch_compliance_by_points(request: BatchCoordinateRequest):
-    return _execute_batch_duckdb(request.points)
+@app.get(
+    "/compliance/point", 
+    response_model=ComplianceResponse, 
+    tags=["Compliance"],
+    responses={404: {"description": "Nenhuma propriedade encontrada para a coordenada informada"}}
+)
+async def get_by_point(lat: float, lon: float):
+    """Busca espacial por Ponto (Lat/Lon)."""
+    query = "SELECT * FROM compliance_data WHERE ST_Contains(geometry, ST_Point(?, ?)) LIMIT 1"
+    result_df = db_con.execute(query, [lon, lat]).df()
+    if result_df.empty:
+        raise HTTPException(status_code=404, detail="Coordenada fora de áreas mapeadas.")
+    
+    row = result_df.replace({np.nan: None}).iloc[0].to_dict()
+    return map_row_to_response(row)
+
+@app.post("/compliance/polygon", response_model=List[ComplianceResponse], tags=["Compliance"])
+async def get_by_polygon(request: PolygonRequest):
+    """Busca por Polígono (WKT ou GeoJSON). Retorna todas as fazendas que intersectam."""
+    try:
+        if request.wkt:
+            geom_query = "ST_GeomFromText(?)"
+            param = request.wkt
+        elif request.geojson:
+            geom_query = "ST_GeomFromGeoJSON(?)"
+            param = json.dumps(request.geojson)
+        else:
+            raise HTTPException(status_code=400, detail="Forneça 'wkt' ou 'geojson'.")
+
+        query = f"SELECT * FROM compliance_data WHERE ST_Intersects(geometry, {geom_query})"
+        result_df = db_con.execute(query, [param]).df()
+        
+        return [map_row_to_response(row.to_dict()) for _, row in result_df.replace({np.nan: None}).iterrows()]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erro no processamento da geometria: {str(e)}")
 
 @app.post("/compliance/batch/csv", response_model=CSVUploadResponse, tags=["Compliance"])
 async def process_csv_compliance(file: UploadFile = File(...)):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="O arquivo deve ser um CSV.")
-    
+    """
+    Processamento inteligente de CSV:
+    Identifica automaticamente colunas de CAR, Coordenadas ou WKT.
+    """
     content = await file.read()
-    try:
-        df = pd.read_csv(io.BytesIO(content), encoding='utf-8-sig', sep=None, engine='python')
-    except Exception:
-        df = pd.read_csv(io.BytesIO(content), encoding='latin1', sep=None, engine='python')
-
-    df_limited = df.head(settings.max_csv_rows)
-    points = []
-
-    if 'coords' in df_limited.columns:
-        for idx, row in df_limited.iterrows():
-            try:
-                c_str = str(row['coords']).replace('(', '').replace(')', '').replace('[', '').replace(']', '').replace(' ', '')
-                parts = c_str.replace(';', ',').split(',')
-                if len(parts) >= 2:
-                    points.append(CoordinatePoint(
-                        lat=float(parts[0]), 
-                        lon=float(parts[1]), 
-                        reference_id=str(row.get('property_alias', f"line_{idx}"))
-                    ))
-            except: continue
-
-    if not points:
-        lat_col = next((c for c in df_limited.columns if 'lat' in c.lower()), None)
-        lon_col = next((c for c in df_limited.columns if 'log' in c.lower() or 'lon' in c.lower()), None)
-        
-        if lat_col and lon_col:
-            for idx, row in df_limited.iterrows():
-                try:
-                    lat_val = str(row[lat_col]).replace(',', '.')
-                    lon_val = str(row[lon_col]).replace(',', '.')
-                    
-                    points.append(CoordinatePoint(
-                        lat=float(lat_val),
-                        lon=float(lon_val),
-                        reference_id=str(row.get('property_alias', idx))
-                    ))
-                except: continue
-
-    if not points:
-        raise HTTPException(status_code=400, detail="Nenhuma coordenada válida encontrada (verifique colunas 'coords' ou 'lat'/'lon').")
-
-    # O _execute_batch_duckdb já faz a limpeza de NaNs/NaTs internamente
-    results = _execute_batch_duckdb(points)
+    df = pd.read_csv(io.BytesIO(content), sep=None, engine='python').head(settings.max_csv_rows)
     
+    results = []
+    car_col = next((c for c in df.columns if 'car' in c.lower() or 'property_id' in c.lower()), None)
+    lat_col = next((c for c in df.columns if 'lat' in c.lower()), None)
+    lon_col = next((c for c in df.columns if 'lon' in c.lower() or 'log' in c.lower()), None)
+    wkt_col = next((c for c in df.columns if 'wkt' in c.lower() or 'geometry' in c.lower()), None)
+
+    for idx, row in df.iterrows():
+        try:
+            res_df = pd.DataFrame()
+            ref_id = str(row.get('reference_id', idx))
+
+            if car_col and pd.notnull(row[car_col]):
+                res_df = db_con.execute("SELECT * FROM compliance_data WHERE property_id = ? OR property_alias = ? LIMIT 1", 
+                                       [str(row[car_col]), str(row[car_col])]).df()
+            elif wkt_col and pd.notnull(row[wkt_col]):
+                res_df = db_con.execute("SELECT * FROM compliance_data WHERE ST_Intersects(geometry, ST_GeomFromText(?)) LIMIT 1", 
+                                       [str(row[wkt_col])]).df()
+            elif lat_col and lon_col and pd.notnull(row[lat_col]):
+                res_df = db_con.execute("SELECT * FROM compliance_data WHERE ST_Contains(geometry, ST_Point(?, ?)) LIMIT 1", 
+                                       [float(row[lon_col]), float(row[lat_col])]).df()
+
+            if not res_df.empty:
+                row_dict = res_df.replace({np.nan: None}).iloc[0].to_dict()
+                results.append(map_row_to_response(row_dict, reference_id=ref_id))
+        except:
+            continue
+
     return {"total_processed": len(results), "results": results}
+
+@app.get("/health", response_model=HealthResponse, tags=["System"])
+async def health():
+    """Verifica o status da API e do motor de processamento."""
+    return {
+        "status": "online", 
+        "engine": "DuckDB + Spatial",
+        "version": "3.1.0"
+    }
