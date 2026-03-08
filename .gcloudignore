@@ -1,24 +1,55 @@
 cat > .gcloudignore <<EOF
-.git
-.gitignore
-README.md
+# --- Ambiente Nix e Python (O PESO ESTÁ AQUI) ---
 .devenv/
+.direnv/
 .venv/
 venv/
+uv.lock
+devenv.lock
+devenv.nix
+devenv.yaml
+.devenv.flake.nix
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.DS_Store
-target/
-dbt_packages/
-logs/
+
+# --- Git e Configurações ---
+.git/
+.github/
+.gitignore
+.vscode/
+.user.yml
+.env
+.envrc
+
+# --- Dados Pesados (Parquet, CSV, JSON) ---
+*.parquet
+*.geoparquet
+*.csv
+*.json
 data/
+logs/
+
+# --- Pastas do Projeto não usadas na API ---
+# (Baseado na sua lista, a API só usa main.py e schemas.py)
+agro_credit_transform/
+airflow/
+assets/
+config/
 legacy/
 notebooks/
-airflow/
+scripts/
+src/
+utils/
 tests/
-*.ctl
-*.sock
-*.pid
+
+# --- Arquivos do Streamlit (Painel) ---
+.streamlit/
+app.py
+Dockerfile.streamlit
+requirements.txt
+
+# --- Outros ---
+README.md
+LICENSE
+pyproject.toml
 EOF

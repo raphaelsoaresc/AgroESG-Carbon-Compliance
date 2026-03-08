@@ -1,18 +1,18 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copia os requerimentos e instala
-COPY requirements.txt .
+RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
+
+# --- MUDANÇA AQUI ---
+# Copia o requirements da API e renomeia para requirements.txt dentro do container
+COPY requirements.api.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+# --------------------
 
-# COPIA O ARQUIVO PARQUET E O APP
-# (Certifique-se de ter rodado o script de exportação antes do docker build)
-COPY data_compliance.parquet .
-COPY app.py .
-COPY .streamlit ./.streamlit
-COPY assets ./assets
+COPY main.py .
+COPY schemas.py .
 
-EXPOSE 8501
+EXPOSE 8080
 
-CMD ["sh", "-c", "streamlit run app.py --server.port=$PORT --server.address=0.0.0.0"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
