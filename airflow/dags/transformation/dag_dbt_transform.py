@@ -140,7 +140,7 @@ with DAG(
         mime_type='application/octet-stream',
         
         # --- ADICIONE ESTAS LINHAS ---
-        chunk_size=50 * 1024 * 1024,  # Envia em pedaços de 50MB (evita timeout)
+        chunk_size=5 * 1024 * 1024,
         execution_timeout=timedelta(minutes=30), # Dá 30 min para a task rodar antes do Airflow matar
         retries=3, # Tenta 3 vezes se falhar
     )

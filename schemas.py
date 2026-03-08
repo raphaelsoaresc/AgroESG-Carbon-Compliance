@@ -7,6 +7,7 @@ class EnvironmentalScore(BaseModel):
     legal_reserve_required_pct: float
     has_app_area: bool
     critical_app_violation: bool
+    is_eudr_compliant: bool = Field(..., description="Elegibilidade para exportação UE (pós-2020)")
 
 class SocialScore(BaseModel):
     indigenous_land_overlap: bool
