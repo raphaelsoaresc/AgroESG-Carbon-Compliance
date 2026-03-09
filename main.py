@@ -23,14 +23,14 @@ from schemas import (
 # --- CONFIGURAÇÕES ---
 class Settings(BaseSettings):
     max_csv_rows: int = 500
-    gcs_bucket_name: str 
+    gcp_bucket_name: str 
     gcs_parquet_path: str = "api_data/fct_compliance_latest.parquet"
-    local_parquet_path: str = "compliance_data.parquet"
+    local_parquet_path: str = "/tmp/compliance_data.parquet"
     
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 settings = Settings()
-db_con = None
+db_con = duckdb.connect(database=':memory:') 
 
 # --- NOVOS SCHEMAS DE ENTRADA E SAÍDA ---
 
@@ -59,25 +59,37 @@ async def lifespan(app: FastAPI):
     print("🚀 Iniciando API Caipora Sentinela...")
     
     local_file = settings.local_parquet_path
+
+    # 1. Download do GCS
     if not os.path.exists(local_file):
         try:
             storage_client = storage.Client()
-            bucket = storage_client.bucket(settings.gcs_bucket_name)
+            bucket = storage_client.bucket(settings.gcp_bucket_name)
             blob = bucket.blob(settings.gcs_parquet_path)
             blob.download_to_filename(local_file)
             print(f"✅ Download concluído: {local_file}")
         except Exception as e:
-            print(f"⚠️ Erro ao baixar do GCS: {e}")
+            print(f"⚠️ ERRO CRÍTICO ao baixar do GCS: {e}")
 
+    # 2. Conecta em MEMÓRIA (Mata o erro de Storage Version)
     db_con = duckdb.connect(database=':memory:') 
-    db_con.execute("INSTALL spatial; LOAD spatial;")
     
+    # 3. Configura e Carrega SPATIAL (Mata o erro de Geometria/SRID)
+    os.makedirs('/tmp/duckdb_extensions', exist_ok=True)
+    db_con.execute("SET extension_directory='/tmp/duckdb_extensions';")
+    db_con.execute("INSTALL spatial; LOAD spatial;")
+
+    # 4. Cria a TABELA
     if os.path.exists(local_file):
-        db_con.execute(f"CREATE OR REPLACE VIEW compliance_data AS SELECT * FROM '{local_file}'")
-        print("✅ Tabela 'compliance_data' montada.")
+        try:
+            db_con.execute(f"CREATE OR REPLACE TABLE compliance_data AS SELECT * FROM read_parquet('{local_file}')")
+            print("✅ Tabela 'compliance_data' carregada com sucesso.")
+        except Exception as e:
+            print(f"❌ ERRO ao gravar tabela: {e}")
     
     yield
-    db_con.close()
+    if db_con:
+        db_con.close()
 
 app = FastAPI(title="Caipora Sentinela API", version="3.1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -150,23 +162,31 @@ def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceRespon
 # --- ENDPOINTS ---
 
 @app.get(
-    "/compliance/car/{car_code}", 
+    "/compliance/car/{car_id}", 
     response_model=ComplianceResponse, 
     tags=["Compliance"],
     responses={404: {"description": "Código do CAR ou ID da propriedade não encontrado"}}
 )
-async def get_by_car(car_code: str):
-    """Busca exata por Código do CAR ou ID da Propriedade."""
-    query = """
-        SELECT * FROM compliance_data 
-        WHERE property_id = ? OR property_alias = ? 
-        LIMIT 1
-    """
-    result_df = db_con.execute(query, [car_code, car_code]).df()
-    if result_df.empty:
-        raise HTTPException(status_code=404, detail="Código do CAR não encontrado na base.")
+@app.get("/compliance/car/{car_id}")
+async def get_by_car(car_id: str): # FastAPI usará este nome no Swagger
+    """Busca exata pelo Código do CAR (mapeado para property_id no banco)."""
     
-    row = result_df.replace({np.nan: None}).iloc[0].to_dict()
+    query = """
+    SELECT 
+        * EXCLUDE (geometry), 
+        ST_AsGeoJSON(geometry) AS geometry 
+    FROM compliance_data 
+    WHERE property_id = ?
+    """
+    
+    # 2. Passamos o car_id (vido da URL) para preencher o ? da property_id
+    result_df = db_con.execute(query, [car_id]).df()
+    
+    if result_df.empty:
+        raise HTTPException(status_code=404, detail="Código do CAR não encontrado.")
+    
+    # 3. Pegamos a primeira linha e enviamos para o mapeador
+    row = result_df.replace({np.nan: None}).to_dict(orient="records")[0]
     return map_row_to_response(row)
 
 @app.get(
@@ -177,7 +197,13 @@ async def get_by_car(car_code: str):
 )
 async def get_by_point(lat: float, lon: float):
     """Busca espacial por Ponto (Lat/Lon)."""
-    query = "SELECT * FROM compliance_data WHERE ST_Contains(geometry, ST_Point(?, ?)) LIMIT 1"
+    # Adicionado EXCLUDE e ST_AsGeoJSON
+    query = """
+        SELECT * EXCLUDE (geometry), ST_AsGeoJSON(geometry) AS geometry 
+        FROM compliance_data 
+        WHERE ST_Contains(geometry, ST_Point(?, ?)) 
+        LIMIT 1
+    """
     result_df = db_con.execute(query, [lon, lat]).df()
     if result_df.empty:
         raise HTTPException(status_code=404, detail="Coordenada fora de áreas mapeadas.")
@@ -187,34 +213,42 @@ async def get_by_point(lat: float, lon: float):
 
 @app.post("/compliance/polygon", response_model=List[ComplianceResponse], tags=["Compliance"])
 async def get_by_polygon(request: PolygonRequest):
-    """Busca por Polígono (WKT ou GeoJSON). Retorna todas as fazendas que intersectam."""
     try:
-        if request.wkt:
+        # Prioriza WKT se ele não estiver vazio
+        if request.wkt and request.wkt.strip():
             geom_query = "ST_GeomFromText(?)"
             param = request.wkt
+        # Se não tiver WKT, tenta GeoJSON
         elif request.geojson:
             geom_query = "ST_GeomFromGeoJSON(?)"
             param = json.dumps(request.geojson)
         else:
-            raise HTTPException(status_code=400, detail="Forneça 'wkt' ou 'geojson'.")
+            raise HTTPException(status_code=400, detail="Forneça um WKT ou GeoJSON válido.")
 
-        query = f"SELECT * FROM compliance_data WHERE ST_Intersects(geometry, {geom_query})"
+        # SQL com a correção do EXCLUDE para evitar o erro de conversão
+        query = f"""
+            SELECT * EXCLUDE (geometry), ST_AsGeoJSON(geometry) AS geometry 
+            FROM compliance_data 
+            WHERE ST_Intersects(geometry, {geom_query})
+        """
+        
         result_df = db_con.execute(query, [param]).df()
         
+        # Converte para lista de respostas
         return [map_row_to_response(row.to_dict()) for _, row in result_df.replace({np.nan: None}).iterrows()]
+
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Erro no processamento da geometria: {str(e)}")
+        print(f"❌ Erro no Polígono: {e}")
+        raise HTTPException(status_code=400, detail=f"Erro na geometria: {str(e)}")
+
 
 @app.post("/compliance/batch/csv", response_model=CSVUploadResponse, tags=["Compliance"])
 async def process_csv_compliance(file: UploadFile = File(...)):
-    """
-    Processamento inteligente de CSV:
-    Identifica automaticamente colunas de CAR, Coordenadas ou WKT.
-    """
     content = await file.read()
-    df = pd.read_csv(io.BytesIO(content), sep=None, engine='python').head(settings.max_csv_rows)
+    df = pd.read_csv(io.BytesIO(content)).head(settings.max_csv_rows)
     
     results = []
+    # Detección de columnas
     car_col = next((c for c in df.columns if 'car' in c.lower() or 'property_id' in c.lower()), None)
     lat_col = next((c for c in df.columns if 'lat' in c.lower()), None)
     lon_col = next((c for c in df.columns if 'lon' in c.lower() or 'log' in c.lower()), None)
@@ -225,23 +259,43 @@ async def process_csv_compliance(file: UploadFile = File(...)):
             res_df = pd.DataFrame()
             ref_id = str(row.get('reference_id', idx))
 
+            # --- LÓGICA DE BÚSQUEDA PRIORIZADA ---
+            
+            # 1. Intentar por CAR/ID si la columna existe y no es nula
             if car_col and pd.notnull(row[car_col]):
-                res_df = db_con.execute("SELECT * FROM compliance_data WHERE property_id = ? OR property_alias = ? LIMIT 1", 
-                                       [str(row[car_col]), str(row[car_col])]).df()
-            elif wkt_col and pd.notnull(row[wkt_col]):
-                res_df = db_con.execute("SELECT * FROM compliance_data WHERE ST_Intersects(geometry, ST_GeomFromText(?)) LIMIT 1", 
-                                       [str(row[wkt_col])]).df()
-            elif lat_col and lon_col and pd.notnull(row[lat_col]):
-                res_df = db_con.execute("SELECT * FROM compliance_data WHERE ST_Contains(geometry, ST_Point(?, ?)) LIMIT 1", 
-                                       [float(row[lon_col]), float(row[lat_col])]).df()
+                res_df = db_con.execute("""
+                    SELECT * EXCLUDE (geometry), ST_AsGeoJSON(geometry) AS geometry 
+                    FROM compliance_data 
+                    WHERE property_id = ? OR property_alias = ? LIMIT 1
+                """, [str(row[car_col]), str(row[car_col])]).df()
 
+            # 2. Si no hubo CAR, intentar por WKT
+            elif wkt_col and pd.notnull(row[wkt_col]):
+                res_df = db_con.execute("""
+                    SELECT * EXCLUDE (geometry), ST_AsGeoJSON(geometry) AS geometry 
+                    FROM compliance_data 
+                    WHERE ST_Intersects(geometry, ST_GeomFromText(?)) LIMIT 1
+                """, [str(row[wkt_col])]).df()
+
+            # 3. Si no hubo lo anterior, intentar por Coordenadas
+            elif lat_col and lon_col and pd.notnull(row[lat_col]):
+                res_df = db_con.execute("""
+                    SELECT * EXCLUDE (geometry), ST_AsGeoJSON(geometry) AS geometry 
+                    FROM compliance_data 
+                    WHERE ST_Contains(geometry, ST_Point(?, ?)) LIMIT 1
+                """, [float(row[lon_col]), float(row[lat_col])]).df()
+
+            # --- PROCESAR RESULTADO ---
             if not res_df.empty:
                 row_dict = res_df.replace({np.nan: None}).iloc[0].to_dict()
                 results.append(map_row_to_response(row_dict, reference_id=ref_id))
-        except:
+                
+        except Exception as e:
+            print(f"Error procesando fila {idx}: {e}")
             continue
 
     return {"total_processed": len(results), "results": results}
+
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 async def health():
