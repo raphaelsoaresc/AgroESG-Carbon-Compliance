@@ -73,34 +73,80 @@ O motor do Caipora Sentinela conta com mais de **90 testes automatizados** via d
 *   **Visualização Espacial:** PyDeck (Deck.GL), Plotly, Folium
 *   **Gerenciamento de Ambiente:** Devenv (Nix) + uv
 
-## 🚦 Como Executar o Projeto
+---
 
-1.  **Inicialização do Ambiente:**
-    Entre no shell isolado e suba os serviços de infraestrutura (Postgres, Airflow DB):
-    ```bash
-    devenv shell
-    devenv up
-    ```
-    *(Mantenha este terminal rodando ou use `-d` se configurado)*
+## 🚀 Guia de Lançamento (Quick Start)
 
-2.  **Airflow (Ingestão MapBiomas):**
-    Em um novo terminal (dentro do `devenv shell`), inicie o scheduler/webserver e dispare a DAG:
-    ```bash
-    start-airflow  # Dispare a DAG ingestion_mapbiomas_intelligent
-    ```
+### 1. Configuração de Ambiente (Vital)
+Antes de subir o shell, prepare suas variáveis de ambiente para o Airflow e as integrações necessárias:
 
-3.  **dbt (Transformação & Veredito):**
-    Processe as camadas Silver/Gold e rode os testes de auditoria:
-    ```bash
-    dbt run --select +fct_compliance_risk
-    dbt test
-    ```
+```bash
+cp .env.example .env
+# Abra o arquivo .env e insira suas chaves (BigQuery / Airflow DB)
+```
 
-4.  **Dashboard:**
-    Visualize os dados e o mapa de compliance:
-    ```bash
-    streamlit run app.py
-    ```
+### 2. Inicialização do Shell & Dependências
+Entre no shell isolado. O `devenv` irá configurar o Python e as ferramentas GIS automaticamente.
+
+```bash
+devenv shell
+
+# Caso o build automático do setuptools oscile, sincronize as dependências manualmente:
+uv sync 
+```
+
+### 3. Infraestrutura & Serviços
+Em um terminal dedicado, suba os serviços de suporte (Postgres para o Airflow MetaDB e DuckDB local):
+
+```bash
+devenv up
+```
+> ⚠️ **Atenção:** Mantenha este processo rodando (neste terminal) para garantir a persistência dos logs e metadados.
+
+### 4. Orquestração (Airflow)
+Em um **novo terminal** (certifique-se de entrar no `devenv shell` novamente), inicie o ecossistema do Airflow para disparar a ingestão inteligente do MapBiomas:
+
+```bash
+start-airflow  # Ativa Webserver + Scheduler
+```
+> 💡 **Dica:** Acesse [http://localhost:8080](http://localhost:8080) no seu navegador para visualizar a interface do Airflow.
+
+### 5. ⛓️ Fluxo de Orquestração (Pipeline de Ingestão)
+Para que o Veredito de Compliance tenha integridade, as DAGs no Airflow devem ser executadas seguindo a lógica de dependência de dados. Siga esta ordem:
+
+**1. Infraestrutura e Referência (Base)**
+Estas DAGs estabelecem o "grid" geográfico do Brasil:
+*   `dag_ingestion_brazil_reference_geodata`: Malhas estaduais e municipais.
+*   `dag_ingestion_hydro_app_zones`: Hidrografia e delimitação de APPs.
+
+**2. Cadastro e Propriedades (O Alvo)**
+Define quem estamos monitorando:
+*   `dag_ingestion_car`: Dados do Cadastro Ambiental Rural.
+*   `dag_sigef`: Geometrias e polígonos oficiais.
+
+**3. Restrições e Auditoria (O Veredito)**
+O cruzamento de dados de órgãos reguladores e satélites:
+*   `dag_ingestion_mapbiomas`: Alertas de desmatamento (O Juiz).
+*   `dag_ibama`: Embargos administrativos.
+*   `dag_ingestion_mte_slave_labor`: Lista Suja de trabalho escravo.
+
+**4. Sensoriamento Remoto & Auditoria de Precisão (Satellite)**
+Execute estas por último, pois elas realizam auditoria fina (NDVI/Topografia) sobre os polígonos já validados:
+*   `dag_satellite_ground_truth`: Validação de desmatamento seletivo.
+*   `dag_satellite_app_auditor`: Monitoramento cirúrgico de áreas protegidas.
+
+### 6. Veredito & Auditoria (dbt)
+Com os dados ingeridos na camada Bronze, processe a inteligência de compliance e rode os testes de rigor técnico:
+
+```bash
+# Gera o Veredito Final
+dbt run --select +fct_compliance_risk  
+
+# Valida integridade e regras ESG
+dbt test                               
+```
+
+---
 
 ## 🗺 Histórico e Evolução (Roadmap)
 
@@ -111,14 +157,16 @@ O motor do Caipora Sentinela conta com mais de **90 testes automatizados** via d
 *   [x] **Territórios e APPs:** Intersecção espacial massiva contra FUNAI, INCRA e ANA.
 *   [x] **Ground Truth (Sensoriamento Remoto):** Detecção de anomalias de vegetação (NDVI Diferencial em APPs) e declividade via GEE.
 *   [x] **API & Serving:** Estruturação base em FastAPI implementada.
-*   [x] **Frontend & UX:** Dashboard interativo finalizado para upload de ativos e visualização de relatórios de conformidade.
-*   [ ] **Integração Full-Stack:** Ajustes finais nos endpoints da API para otimizar a comunicação com o Frontend em tempo real.
+*   [x] **Integração Full-Stack:** Ajustes finais nos endpoints da API para otimizar a comunicação com o Frontend em tempo real.
+*   [ ] **Frontend & UX:** Dashboard interativo finalizado para upload de ativos e visualização de relatórios de conformidade.
 *   [ ] **Escalabilidade Nacional:** Expansão da infraestrutura e dados para cobrir todo o território brasileiro.
 
 ---
+
 ## ⚖️ Licença
 
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+Este projeto está sob a licença MIT. Veja o arquivo[LICENSE](LICENSE) para mais detalhes.
 
 **Autor:** Raphael Soares
+
 *Framework de Geospatial Data Engineering aplicado à conformidade socioambiental e auditoria do mercado de carbono.*
