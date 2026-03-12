@@ -22,15 +22,34 @@ RAW_PATH = os.getenv("RAW_PATH_CAR", "./data/raw/car")
 STAGING_PATH = os.getenv("STAGING_PATH", "./data/staging")
 ARCHIVE_PATH = os.getenv("ARCHIVE_PATH_CAR", "./data/archive/car")
 
-# Caixa delimitadora para o Mato Grosso (MT)
-MT_BBOX = "ST_MakeEnvelope(-61.63, -18.04, -50.22, -7.34)"
+# --- CONFIGURAÇÕES DOS ESTADOS ---
+STATES = ['PA', 'MT', 'AM', 'RO']
 
+# Caixas delimitadoras (BBOX) aproximadas para cada estado. 
+# Isso evita que polígonos com erro de digitação (ex: lat/long 0,0) quebrem análises futuras.
+STATE_BBOXES = {
+    'PA': 'ST_MakeEnvelope(-58.89, -9.84, -46.06, 2.59)',
+    'MT': 'ST_MakeEnvelope(-61.63, -18.04, -50.22, -7.34)',
+    'AM': 'ST_MakeEnvelope(-73.80, -9.81, -56.09, 2.24)',
+    'RO': 'ST_MakeEnvelope(-66.80, -13.69, -59.77, -7.96)'
+}
+
+# --- GERAÇÃO DINÂMICA DAS FONTES ---
+# Mantemos os CSVs que possivelmente são nacionais ou únicos
 CAR_SOURCES = {
     'temas_ambientais': {'file': 'TEMAS_AMBIENTAIS.CSV', 'table': 'car_temas_ambientais', 'type': 'csv'},
     'sobreposicao': {'file': 'SOBREPOSICAO.CSV', 'table': 'car_sobreposicao', 'type': 'csv'},
-    'metadados_api': {'file': 'METADADOS_API_CPF_CNPJ.csv', 'table': 'car_metadados_proprietarios', 'type': 'csv'},
-    'area_imovel': {'file': 'AREA_IMOVEL.zip', 'table': 'car_area_imovel_geometria', 'type': 'spatial'}
+    'metadados_api': {'file': 'METADADOS_API_CPF_CNPJ.csv', 'table': 'car_metadados_proprietarios', 'type': 'csv'}
 }
+
+# Adicionamos dinamicamente os arquivos espaciais para cada estado
+for uf in STATES:
+    CAR_SOURCES[f'area_imovel_{uf.lower()}'] = {
+        'file': f'AREA_IMOVEL_{uf}.zip', # IMPORTANTE: Renomeie seus zips na pasta raw para este padrão
+        'table': f'car_area_imovel_geometria_{uf.lower()}', # Tabela separada por estado no BQ
+        'type': 'spatial',
+        'uf': uf
+    }
 
 default_args = {
     'owner': 'airflow',
@@ -41,7 +60,6 @@ default_args = {
 }
 
 def check_file_exists(file_pattern):
-    # Busca parcial (flexível)
     if not os.path.exists(RAW_PATH): return False
     return any(file_pattern in f for f in os.listdir(RAW_PATH))
 
@@ -49,30 +67,26 @@ def process_car_with_duckdb(source_key, ti):
     conf = CAR_SOURCES[source_key]
     file_pattern = conf['file']
     
-    # Busca o arquivo real baseado no padrão
-    files = [f for f in os.listdir(RAW_PATH) if file_pattern in f]
+    files =[f for f in os.listdir(RAW_PATH) if file_pattern in f]
     if not files:
         raise FileNotFoundError(f"Arquivo contendo {file_pattern} não encontrado.")
     
     original_filename = files[0]
     full_path = os.path.join(RAW_PATH, original_filename)
 
-    # 1. Hash
     with open(full_path, "rb") as f:
         file_hash = hashlib.md5(f.read()).hexdigest()
     
     output_filename = f"car_{source_key}_{file_hash}.parquet"
     output_path = os.path.join(STAGING_PATH, output_filename)
     
-    # 2. Configuração DuckDB (Otimizada para 8GB RAM Single Task)
     con = duckdb.connect(database=':memory:')
-    con.execute("SET memory_limit='4GB';") # Seguro pois rodaremos 1 task por vez
+    con.execute("SET memory_limit='4GB';") 
     con.execute("SET threads=2;")
     
-    extracted_files = []
+    extracted_files =[]
     working_path = full_path
 
-    # 3. Tratamento ZIP
     if original_filename.lower().endswith('.zip'):
         with zipfile.ZipFile(full_path, 'r') as zip_ref:
             zip_ref.extractall(RAW_PATH)
@@ -86,24 +100,26 @@ def process_car_with_duckdb(source_key, ti):
             working_path = os.path.join(RAW_PATH, candidates[0])
 
     try:
-        # 4. Lógica de Query (Híbrida: Robustez do Script B + Filtros)
         if conf['type'] == 'spatial':
+            uf = conf['uf']
+            bbox = STATE_BBOXES[uf]
             con.execute("INSTALL spatial; LOAD spatial;")
-            # ST_MakeValid é CRUCIAL para o BigQuery não rejeitar polígonos corrompidos
+            
+            # Adicionada a coluna uf_origem e o BBOX dinâmico
             query = f"""
                 COPY (
                     SELECT 
                         * EXCLUDE (geom),
                         ST_AsText(ST_MakeValid(geom)) as wkt_geom,
+                        '{uf}' as uf_origem,
                         '{file_hash}' as file_hash,
                         '{original_filename}' as source_filename,
                         now() as ingested_at
                     FROM st_read('{working_path}')
-                    WHERE ST_Intersects(geom, {MT_BBOX})
+                    WHERE ST_Intersects(geom, {bbox})
                 ) TO '{output_path}' (FORMAT 'PARQUET', CODEC 'SNAPPY');
             """
         else:
-            # ALL_VARCHAR=TRUE evita erros de schema na ingestão Bronze
             query = f"""
                 COPY (
                     SELECT 
@@ -120,7 +136,6 @@ def process_car_with_duckdb(source_key, ti):
         
     finally:
         con.close()
-        # Limpeza
         for f in extracted_files:
             p = os.path.join(RAW_PATH, f)
             if os.path.exists(p) and p != full_path:
@@ -135,10 +150,7 @@ with DAG(
     default_args=default_args,
     schedule_interval=None,
     max_active_runs=1,
-    # --- PROTEÇÃO DE MEMÓRIA ---
-    # Garante que processamos UM arquivo por vez.
-    # Sem isso, o Airflow tentaria rodar CSVs e Shapefiles juntos, travando os 8GB RAM.
-    max_active_tasks=1, 
+    max_active_tasks=1, # Mantido em 1 para proteger a RAM de 8GB
     catchup=False,
     tags=['bronze', 'car', 'spatial', 'duckdb'],
 ) as dag:
@@ -173,14 +185,13 @@ with DAG(
                 task_id='load_bq',
                 configuration={
                     "load": {
-                        "sourceUris": [f"gs://{BUCKET_NAME}/bronze/car/{s_id}/" + "{{ ti.xcom_pull(task_ids='group_" + s_id + ".process_duckdb', key='output_filename') }}"],
+                        "sourceUris":[f"gs://{BUCKET_NAME}/bronze/car/{s_id}/" + "{{ ti.xcom_pull(task_ids='group_" + s_id + ".process_duckdb', key='output_filename') }}"],
                         "destinationTable": {
                             "projectId": PROJECT_ID,
                             "datasetId": DATASET_ID,
                             "tableId": s_conf['table']
                         },
                         "sourceFormat": "PARQUET",
-                        # WRITE_TRUNCATE é mais seguro para evitar duplicatas em re-execuções manuais
                         "writeDisposition": "WRITE_TRUNCATE", 
                         "autodetect": True,
                     }
@@ -209,6 +220,5 @@ with DAG(
         wait_for_completion=False,
         reset_dag_run=True
     )
-
-    # Conecta todos os grupos ao trigger final
+    
     [tg for tg in dag.task_group_dict.values() if isinstance(tg, TaskGroup)] >> trigger_dbt
