@@ -5,7 +5,7 @@
 
 WITH source_data AS (
     SELECT * FROM {{ source('raw_data', 'ibama_history') }}
-    WHERE UF = 'MT'
+    WHERE UF IN ('MT', 'AM', 'RO', 'PA') -- Filtramos só os estados que temos no SIGEF para facilitar o JOIN depois
 ),
 
 deduplicated AS (
@@ -29,6 +29,9 @@ renamed_and_filtered AS (
         
         -- IDENTIFICAÇÃO: Limpeza de CPF/CNPJ (remove . , - /)
         REGEXP_REPLACE(CAST(CPF_CNPJ_EMBARGADO AS STRING), r'[\.\-\/\,]', '') as tax_id,
+        
+        -- 🟢 NOVO: Pegando o nome do infrator e padronizando (Maiúsculas e sem espaços sobrando)
+        TRIM(UPPER(CAST(NOME_EMBARGADO AS STRING))) as offender_name,
 
         UF as state,
         MUNICIPIO as city,

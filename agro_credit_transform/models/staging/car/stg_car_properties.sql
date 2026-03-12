@@ -5,7 +5,14 @@
 ) }}
 
 WITH source_data AS (
-    SELECT * FROM {{ source('raw_data', 'car_area_imovel_geometria') }}
+    -- Unindo as 4 tabelas geradas pela DAG
+    SELECT * FROM {{ source('raw_data', 'car_area_imovel_geometria_pa') }}
+    UNION ALL
+    SELECT * FROM {{ source('raw_data', 'car_area_imovel_geometria_mt') }}
+    UNION ALL
+    SELECT * FROM {{ source('raw_data', 'car_area_imovel_geometria_am') }}
+    UNION ALL
+    SELECT * FROM {{ source('raw_data', 'car_area_imovel_geometria_ro') }}
 ),
 
 renamed_and_filtered AS (
@@ -13,17 +20,18 @@ renamed_and_filtered AS (
         -- Identifiers
         cod_imovel as property_id,
         
-        -- Property Data (Já veio como FLOAT64, não precisa de REPLACE)
+        -- Property Data
         num_area as area_ha,
         mod_fiscal as fiscal_modules,
         
-        ind_status as status_code, -- Nome cortado no raw
-        des_condic as condition_desc, -- Nome cortado no raw
+        ind_status as status_code, 
+        des_condic as condition_desc, 
         ind_tipo as property_type,
         
         -- Location
         municipio as city,
         cod_estado as state,
+        uf_origem, -- Nova coluna que injetamos via DuckDB na DAG
         
         -- Geometry
         wkt_geom as geometry_wkt,

@@ -3,8 +3,17 @@
     schema='agro_esg_staging'
 ) }}
 
+-- 1. Definimos a lista de estados que já temos ingeridos
+{% set ufs =['mt', 'am', 'ro', 'pa'] %}
+
+-- 2. Fazemos um loop para unir (UNION ALL) todas as tabelas de estados
 WITH source_data AS (
-    SELECT * FROM {{ source('raw_data', 'sigef_history') }}
+    {% for uf in ufs %}
+        SELECT * FROM {{ source('raw_data', 'sigef_history_' ~ uf) }}
+        
+        -- Adiciona o UNION ALL entre os selects, exceto no último
+        {% if not loop.last %} UNION ALL {% endif %}
+    {% endfor %}
 ),
 
 renamed_and_filtered AS (
@@ -26,16 +35,17 @@ renamed_and_filtered AS (
         -- Localização
         municipio_ as city_id,
         uf_id as state_id,
+        uf as state_abbreviation, -- Nova coluna que criamos lá no DuckDB!
         
         -- Geometria (WKT vindo do DuckDB)
         geom as geometry_wkt,
         
         -- Auditoria
         file_hash,
+        source_filename, -- Nova coluna que criamos lá no DuckDB!
         ingested_at
 
     FROM source_data
-
 ),
 
 deduplicated AS (

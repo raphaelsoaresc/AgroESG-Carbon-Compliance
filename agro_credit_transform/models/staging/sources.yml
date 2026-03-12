@@ -17,19 +17,51 @@ sources:
             description: "Declividade máxima encontrada no polígono."
 
       # --- REGULARIDADE FUNDIÁRIA E AMBIENTAL ---
-      - name: sigef_history
-        description: "Histórico de certificações de imóveis rurais no SIGEF."
+      
+      # Tabelas do SIGEF separadas por UF (geradas dinamicamente pelo Airflow)
+      - name: sigef_history_mt
+        description: "Histórico de certificações de imóveis rurais no SIGEF - Mato Grosso."
         columns: &hash_control
           - name: file_hash
             description: "Hash MD5 do arquivo original para controle de idempotência."
 
-      - name: car_area_imovel_geometria
-        description: "Geometria espacial (WKT) das propriedades rurais do CAR."
-        columns:
+      - name: sigef_history_am
+        description: "Histórico de certificações de imóveis rurais no SIGEF - Amazonas."
+        columns: *hash_control
+
+      - name: sigef_history_ro
+        description: "Histórico de certificações de imóveis rurais no SIGEF - Rondônia."
+        columns: *hash_control
+
+      - name: sigef_history_pa
+        description: "Histórico de certificações de imóveis rurais no SIGEF - Pará."
+        columns: *hash_control
+
+      # --- TABELAS DO CAR ---
+      
+      # Tabelas de Geometria do CAR separadas por UF (geradas dinamicamente pelo Airflow)
+      - name: car_area_imovel_geometria_mt
+        description: "Geometria espacial (WKT) das propriedades rurais do CAR - Mato Grosso."
+        columns: &car_geom_columns
           - <<: *hash_control
           - name: wkt_geom
             description: "Geometria em formato WKT (EPSG:4326)."
+          - name: uf_origem
+            description: "Sigla do estado injetada durante a ingestão via DuckDB."
 
+      - name: car_area_imovel_geometria_pa
+        description: "Geometria espacial (WKT) das propriedades rurais do CAR - Pará."
+        columns: *car_geom_columns
+
+      - name: car_area_imovel_geometria_am
+        description: "Geometria espacial (WKT) das propriedades rurais do CAR - Amazonas."
+        columns: *car_geom_columns
+
+      - name: car_area_imovel_geometria_ro
+        description: "Geometria espacial (WKT) das propriedades rurais do CAR - Rondônia."
+        columns: *car_geom_columns
+
+      # Demais tabelas do CAR (Nacionais/Gerais)
       - name: car_metadados_proprietarios
         description: "Metadados de detentores e datas de registro do CAR."
 
