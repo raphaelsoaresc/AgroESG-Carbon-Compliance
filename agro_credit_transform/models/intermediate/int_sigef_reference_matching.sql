@@ -31,11 +31,11 @@ biomes_match AS (
     FROM property_base p
     INNER JOIN {{ ref('int_brazil_reference_geometries') }} ref
         ON ref.restriction_type = 'BIOME'
-        -- Tolerância de 1000 metros resolve os 8 casos "Desconhecidos"
+        -- Tolerância de 1000 metros resolve os casos de fronteira/desconhecidos
         AND ST_DWITHIN(p.centroid, ref.geometry, 1000)
 ),
 
--- 2. MATCHING DE HARD BLOCKS (Mantido via Polígono para segurança total)
+-- 2. MATCHING DE HARD BLOCKS (TIs, UCs, Quilombolas, etc)
 hard_blocks_match AS (
     SELECT
         p.property_id,
@@ -53,7 +53,8 @@ hard_blocks_match AS (
     FROM property_base p
     INNER JOIN {{ ref('int_brazil_reference_geometries') }} ref
         ON ref.restriction_type != 'BIOME'
-        AND ST_INTERSECTSBOX(p.full_geom, ref.bbox.xmin, ref.bbox.ymin, ref.bbox.xmax, ref.bbox.ymax)
+        -- O BigQuery otimiza o ST_INTERSECTS automaticamente usando índices S2.
+        -- Não precisamos de Bounding Box manual aqui!
         AND ST_INTERSECTS(p.full_geom, ref.geometry)
 ),
 
@@ -66,6 +67,7 @@ unioned_matches AS (
 SELECT
     * EXCEPT(dist_score)
 FROM unioned_matches
+-- Garante que se a fazenda cair em 2 biomas, pega o mais próximo do centro
 QUALIFY ROW_NUMBER() OVER(
     PARTITION BY property_id, restriction_type 
     ORDER BY dist_score ASC

@@ -1,7 +1,7 @@
 {{ config(
     materialized='table',
     schema='agro_esg_intermediate',
-    cluster_by='geometry',
+    cluster_by=['state', 'geometry'],
     tags=['car']
 ) }}
 

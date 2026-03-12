@@ -1,7 +1,7 @@
 {{ config(
     materialized='table',
     schema='agro_esg_marts',
-    cluster_by=['final_eligibility_status', 'biome_name'],
+    cluster_by=['uf_origem', 'final_eligibility_status', 'biome_name'],
     tags=['compliance', 'legal', 'cmn_5081', 'eudr']
 ) }}
 
@@ -14,6 +14,8 @@ WITH properties AS (
         g.area_ha, 
         -- 1. MUNICÍPIO: Adicionado aqui na fonte
         g.city, 
+        -- AJUSTE 2: Trazendo a coluna de estado que injetamos na DAG
+        g.uf_origem,
         TRIM(o.registration_status) as registration_status, 
         g.geometry, 
         g.centroid
@@ -205,6 +207,8 @@ SELECT
     v.area_ha,
     -- 1. MUNICÍPIO: Exposto no final
     v.city,
+    -- AJUSTE 3: Expondo o estado no final para os dashboards
+    v.uf_origem,
     COALESCE(v.registration_status, 'ATIVO') as car_status,
     v.biome_name,
     v.geometry,
@@ -234,7 +238,7 @@ SELECT
 
     CONCAT(
         CASE WHEN v.detailed_evidence_string != '' THEN CONCAT("⚠️ RESTRIÇÕES: ", v.detailed_evidence_string, " | ") ELSE "✅ EM CONFORMIDADE | " END,
-        CASE WHEN c.property_id IS NOT NULL THEN CONCAT("🚧 VIZINHANÇA: Vizinho com [", c.neighbor_statuses, "] | ") ELSE "" END,
+        CASE WHEN c.property_id IS NOT NULL THEN CONCAT("🚧 VIZINHANÇA: Vizinho com[", c.neighbor_statuses, "] | ") ELSE "" END,
         CONCAT("📊 MÉTRICAS: ", v.compliance_metrics_string)
     ) as technical_evidence,
 
