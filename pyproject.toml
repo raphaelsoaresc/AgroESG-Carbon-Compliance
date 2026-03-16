@@ -38,6 +38,7 @@ dependencies = [
     "apache-airflow-providers-google>=10.0.0",
     "dbterd>=1.23.0",
     "geopandas>=1.1.2",
+    "passlib[bcrypt]>=1.7.4",
 ]
 
 [tool.uv]
