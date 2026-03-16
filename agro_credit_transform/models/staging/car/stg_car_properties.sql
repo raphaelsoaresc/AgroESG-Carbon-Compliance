@@ -20,9 +20,15 @@ renamed_and_filtered AS (
         -- Identifiers
         cod_imovel as property_id,
         
-        -- Property Data
-        num_area as area_ha,
-        mod_fiscal as fiscal_modules,
+        -- Property Data (Com Trava de Sanidade para Hectares vs Metros Quadrados)
+        CASE 
+            -- Se a área for maior que 500.000 (maior que a maior fazenda do BR), 
+            -- assumimos que o produtor digitou em m² e dividimos por 10.000 para converter em ha.
+            WHEN SAFE_CAST(num_area AS FLOAT64) > 500000 THEN SAFE_CAST(num_area AS FLOAT64) / 10000
+            ELSE SAFE_CAST(num_area AS FLOAT64)
+        END as area_ha,
+
+        SAFE_CAST(mod_fiscal AS FLOAT64) as fiscal_modules,
         
         ind_status as status_code, 
         des_condic as condition_desc, 
@@ -31,7 +37,7 @@ renamed_and_filtered AS (
         -- Location
         municipio as city,
         cod_estado as state,
-        uf_origem, -- Nova coluna que injetamos via DuckDB na DAG
+        uf_origem, 
         
         -- Geometry
         wkt_geom as geometry_wkt,

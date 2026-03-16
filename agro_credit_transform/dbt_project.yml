@@ -1,5 +1,5 @@
 name: 'agro_credit_transform'
-version: '1.2.0' # Atualizado para refletir a integração do MapBiomas
+version: '1.2.0'
 config-version: 2
 
 profile: 'agro_credit_transform'
@@ -19,20 +19,23 @@ clean-targets:
 # 1. VARIÁVEIS GLOBAIS (Onde a mágica acontece)
 # ---------------------------------------------------------------
 vars:
-  # Data do Marco Temporal (Código Florestal)
-  # ATENÇÃO: Esta data controla o filtro do "Grande Juiz" (MapBiomas).
-  # Alertas antes desta data são ignorados; após, geram bloqueio.
+  # --- Configurações de Compliance e Limites ---
+  # Data do Marco Temporal (Código Florestal): Alertas antes desta data são ignorados.
   forest_code_threshold_date: '2008-07-22'
   
-  # Limite de tolerância para ruído de GPS/GIS (em hectares)
-  # Usado para ignorar micro-sobreposições ou erros de digitalização
+  # Limite de tolerância para ruído de GPS/GIS (em hectares e %)
   gis_noise_ha_threshold: 0.1
-  
-  # Limite de tolerância percentual (0.005 = 0.5% da área da propriedade)
   gis_noise_pct_threshold: 0.005
 
+  # --- Multiplicadores de Risco Financeiro (Brecha 3) ---
+  # Valores usados para calcular o passivo ambiental estimado
+  fine_deforestation_per_ha: 5000
+  fine_protected_area_per_ha: 10000
+  fine_slave_labor_fixed: 500000
+  fine_app_violation_fixed: 50000
+  fine_rl_deficit_per_ha: 5000
+
   # --- OTIMIZAÇÃO ESPACIAL (Bounding Box para Mato Grosso) ---
-  # Isso acelera drasticamente o ST_INTERSECTSBOX nos modelos de compliance
   bbox_min_lon: -62.0  # Oeste do MT
   bbox_max_lon: -46.0  # Leste do MT
   bbox_min_lat: -18.5  # Sul do MT
@@ -43,23 +46,18 @@ vars:
 # ---------------------------------------------------------------
 models:
   agro_credit_transform:
-    # Configuração padrão para todos os modelos
     +materialized: view
     
-    # Camada de Limpeza e Padronização (Raw -> Staging)
     staging:
       +schema: agro_esg_staging
       +materialized: view
       +tags: ["bronze", "staging"]
 
-    # Camada de Transformação e Joins Complexos (Cruzamentos Espaciais)
-    # Materialized table é CRUCIAL aqui para performance dos joins espaciais
     intermediate:
       +schema: agro_esg_intermediate
       +materialized: table 
       +tags: ["silver", "intermediate"]
 
-    # Camada de Negócio e Consumo (Dashboards/API/Relatórios)
     marts:
       +schema: agro_esg_marts
       +materialized: table

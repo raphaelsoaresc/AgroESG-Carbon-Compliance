@@ -18,17 +18,11 @@ renamed_and_filtered AS (
         -- Origem indica o tipo (ex: FUNAI, INCRA, ESTADUAL)
         origem as overlap_source,
         
-        -- Percentual (Tratamento numérico)
-        SAFE_CAST(
-            REPLACE(REPLACE(CAST(percentual AS STRING), '.', ''), ',', '.') 
-            AS FLOAT64
-        ) as overlap_percentage,
+        -- Percentual (Conversão direta via SAFE_CAST)
+        SAFE_CAST(percentual AS FLOAT64) as overlap_percentage,
         
-        -- Área de conflito (Tratamento numérico)
-        SAFE_CAST(
-            REPLACE(REPLACE(CAST(area_de_conflito AS STRING), '.', ''), ',', '.') 
-            AS FLOAT64
-        ) as overlap_area_ha,
+        -- Área de conflito (Conversão direta via SAFE_CAST)
+        SAFE_CAST(area_de_conflito AS FLOAT64) as overlap_area_ha,
         
         file_hash,
         ingested_at
@@ -39,7 +33,7 @@ renamed_and_filtered AS (
 deduplicated AS (
     SELECT 
         *,
-        -- Deduplicação
+        -- Deduplicação por imóvel e tipo de sobreposição
         ROW_NUMBER() OVER (
             PARTITION BY property_id, overlap_name, overlap_source
             ORDER BY ingested_at DESC

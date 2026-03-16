@@ -6,46 +6,41 @@
 ) }}
 
 WITH car_geometries AS (
-    SELECT 
+    SELECT
         property_id AS car_property_id,
         geometry AS car_geometry
     FROM {{ ref('int_car_geometries') }}
     WHERE geometry IS NOT NULL
 ),
 
--- Fonte A: Áreas de Trabalho Escravo (via Ponte SIGEF)
--- MELHORIA: Usa o REGEXP do Código 2 para limpar coordenadas Z (3D)
 dirty_sigef AS (
-    SELECT 
+    SELECT
         tax_id,
         employer_name,
         sigef_property_id,
         SAFE.ST_GEOGFROMTEXT(
             REGEXP_REPLACE(
-                REGEXP_REPLACE(sigef_geometry_wkt, r'(\b[A-Z]+)\s+Z\b', r'\1'), 
-                r'([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?', 
+                REGEXP_REPLACE(sigef_geometry_wkt, r'(\b[A-Z]+)\s+Z\b', r'\1'),
+                r'([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?',
                 r'\1 \2'
-            ), 
+            ),
             make_valid => TRUE
         ) AS sigef_geometry
     FROM {{ ref('int_compliance__slave_labor_sigef_bridge') }}
     WHERE sigef_geometry_wkt IS NOT NULL
 ),
 
--- Fonte B: Áreas de Embargo Ambiental (via CPF/IBAMA)
 dirty_ibama AS (
-    SELECT 
+    SELECT
         tax_id,
         employer_name,
-        detail.is_active_embargo, -- Pega de dentro do struct
+        detail.is_active_embargo,
         SAFE.ST_GEOGFROMTEXT(detail.geometry_wkt, make_valid => TRUE) AS ibama_geometry
     FROM {{ ref('int_compliance__identity_check') }},
-    UNNEST(ibama_details) AS detail -- <--- AQUI ESTÁ A MÁGICA
+    UNNEST(ibama_details) AS detail
     WHERE detail.geometry_wkt IS NOT NULL
 ),
 
--- Fonte C: O Grande Juiz (MapBiomas)
--- RESGATADO do Código 1
 dirty_mapbiomas AS (
     SELECT
         car_code,
@@ -55,16 +50,14 @@ dirty_mapbiomas AS (
     FROM {{ ref('int_mapbiomas_deforestation') }}
 ),
 
--- Cruzamento 1: CAR vs SIGEF (Trabalho Escravo)
--- MELHORIA: Usa a estrutura de subquery do Código 2
 check_slave_labor AS (
     SELECT
         car_property_id,
-        employer_name,
-        tax_id,
+        MAX(employer_name) AS employer_name,
+        MAX(tax_id) AS tax_id,
         'SOCIAL_RISK_SLAVE_LABOR' AS risk_type,
         'OVERLAP WITH SIGEF AREA LINKED TO SLAVE LABOR' AS risk_description,
-        ST_AREA(intersection_geom) / 10000 AS overlap_ha
+        SUM(ST_AREA(intersection_geom) / 10000) AS overlap_ha
     FROM (
         SELECT
             c.car_property_id,
@@ -73,23 +66,22 @@ check_slave_labor AS (
             ST_INTERSECTION(c.car_geometry, s.sigef_geometry) AS intersection_geom
         FROM car_geometries c
         INNER JOIN dirty_sigef s
-            ON ST_INTERSECTS(c.car_geometry, s.sigef_geometry)
+        ON ST_INTERSECTS(c.car_geometry, s.sigef_geometry)
     )
-    WHERE intersection_geom IS NOT NULL 
-        AND NOT ST_ISEMPTY(intersection_geom)
-        AND ST_AREA(intersection_geom) > 0.0001
+    WHERE intersection_geom IS NOT NULL
+      AND NOT ST_ISEMPTY(intersection_geom)
+      AND ST_AREA(intersection_geom) > 0.0001
+    GROUP BY car_property_id
 ),
 
--- Cruzamento 2: CAR vs IBAMA (Crime Ambiental)
--- MELHORIA: Usa a estrutura de subquery do Código 2
 check_environmental AS (
     SELECT
         car_property_id,
-        employer_name,
-        tax_id,
+        MAX(employer_name) AS employer_name,
+        MAX(tax_id) AS tax_id,
         'ENVIRONMENTAL_RISK_EMBARGO' AS risk_type,
         'OVERLAP WITH IBAMA EMBARGO AREA' AS risk_description,
-        ST_AREA(intersection_geom) / 10000 AS overlap_ha
+        SUM(ST_AREA(intersection_geom) / 10000) AS overlap_ha
     FROM (
         SELECT
             c.car_property_id,
@@ -98,29 +90,28 @@ check_environmental AS (
             ST_INTERSECTION(c.car_geometry, i.ibama_geometry) AS intersection_geom
         FROM car_geometries c
         INNER JOIN dirty_ibama i
-            ON ST_INTERSECTS(c.car_geometry, i.ibama_geometry)
+        ON ST_INTERSECTS(c.car_geometry, i.ibama_geometry)
         WHERE i.is_active_embargo = TRUE
     )
-    WHERE intersection_geom IS NOT NULL 
-        AND NOT ST_ISEMPTY(intersection_geom)
-        AND ST_AREA(intersection_geom) > 0.0001
+    WHERE intersection_geom IS NOT NULL
+      AND NOT ST_ISEMPTY(intersection_geom)
+      AND ST_AREA(intersection_geom) > 0.0001
+    GROUP BY car_property_id
 ),
 
--- Cruzamento 3: CAR vs MapBiomas
--- RESGATADO do Código 1
 check_mapbiomas AS (
     SELECT
         m.car_code as car_property_id,
-        'MAPBIOMAS ALERT' as employer_name, 
-        CAST(m.alert_id as STRING) as tax_id, 
+        'MAPBIOMAS ALERT' as employer_name,
+        CAST(MAX(m.alert_id) as STRING) as tax_id,
         'ENVIRONMENTAL_RISK_DEFORESTATION' as risk_type,
-        CONCAT('CONFIRMED DEFORESTATION AFTER JULY 2008 (Date: ', CAST(m.detection_date AS STRING), ')') as risk_description,
-        m.deforestation_overlap_ha as overlap_ha
+        CONCAT('CONFIRMED DEFORESTATION AFTER JULY 2008 (Latest Date: ', CAST(MAX(m.detection_date) AS STRING), ')') as risk_description,
+        SUM(m.deforestation_overlap_ha) as overlap_ha
     FROM dirty_mapbiomas m
     WHERE m.deforestation_overlap_ha > 0.0001
+    GROUP BY m.car_code
 )
 
--- Consolidação Final
 SELECT * FROM check_slave_labor
 UNION ALL
 SELECT * FROM check_environmental

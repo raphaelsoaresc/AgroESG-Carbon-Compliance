@@ -7,11 +7,11 @@ WITH mapbiomas_violations AS (
         property_id,
         final_eligibility_status,
         mapbiomas_deforested_ha,
-        mapbiomas_date
+        mapbiomas_detection_date -- NOME ATUALIZADO AQUI
     FROM {{ ref('fct_compliance_risk') }}
     WHERE final_eligibility_status = 'ELIGIBLE'
       AND mapbiomas_deforested_ha > 0.1 -- Ignora ruído de GIS
-      AND mapbiomas_date >= '2008-07-22' -- Marco Temporal
+      AND mapbiomas_detection_date >= '2008-07-22' -- NOME ATUALIZADO AQUI
 )
 
 SELECT * FROM mapbiomas_violations

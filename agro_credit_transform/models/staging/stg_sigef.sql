@@ -18,49 +18,50 @@ WITH source_data AS (
 
 renamed_and_filtered AS (
     SELECT
-        -- Identificadores Únicos
         codigo_imo as property_id,
         parcela_co as parcel_id,
-        
-        -- Atributos da Propriedade
         nome_area as property_name,
         status as certification_status,
         situacao_i as legal_situation,
-        
-        -- Datas
         data_submi as submission_date,
         data_aprov as approval_date,
         registro_d as registration_date,
-        
-        -- Localização
         municipio_ as city_id,
         uf_id as state_id,
-        uf as state_abbreviation, -- Nova coluna que criamos lá no DuckDB!
-        
-        -- Geometria (WKT vindo do DuckDB)
+        uf as state_abbreviation,
         geom as geometry_wkt,
-        
-        -- Auditoria
         file_hash,
-        source_filename, -- Nova coluna que criamos lá no DuckDB!
+        source_filename,
         ingested_at
-
     FROM source_data
 ),
 
-deduplicated AS (
+-- 1ª Barreira: Garante que não exista NENHUM parcel_id duplicado (pega o mais recente)
+dedup_parcel AS (
     SELECT 
         *,
-        -- Deduplicação pelo ID do imóvel (codigo_imo)
+        ROW_NUMBER() OVER (
+            PARTITION BY parcel_id 
+            ORDER BY ingested_at DESC
+        ) as rn_parcel
+    FROM renamed_and_filtered
+),
+
+-- 2ª Barreira: Garante que não exista NENHUM property_id duplicado
+dedup_property AS (
+    SELECT 
+        *,
         ROW_NUMBER() OVER (
             PARTITION BY property_id 
             ORDER BY ingested_at DESC
-        ) as row_num
-    FROM renamed_and_filtered
+        ) as rn_property
+    FROM dedup_parcel
+    WHERE rn_parcel = 1 -- Já filtra as parcelas duplicadas aqui
 )
 
 SELECT 
-    * EXCEPT(row_num)
-FROM deduplicated
-WHERE row_num = 1
+    * EXCEPT(rn_parcel, rn_property)
+FROM dedup_property
+WHERE rn_property = 1
     AND property_id IS NOT NULL
+    AND parcel_id IS NOT NULL

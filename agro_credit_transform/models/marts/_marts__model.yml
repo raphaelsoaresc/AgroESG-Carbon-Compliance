@@ -7,25 +7,78 @@ models:
     # 1. TESTES DE NÍVEL DE MODELO (Integridade das Regras de Negócio)
     data_tests:
       - dbt_utils.expression_is_true:
-          # Se for ELIGIBLE, não pode ter embargo significativo (exceto ruído GIS)
           expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND embargo_area_ha > 0.1)"
           name: "check_eligible_properties_environmental_limit"
       
       - dbt_utils.expression_is_true:
-          # Se for ELIGIBLE, não pode ter match de trabalho escravo
           expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND final_eligibility_status LIKE '%SOCIAL%')"
           name: "check_eligible_properties_social_limit"
 
       - dbt_utils.expression_is_true:
-          # Se for ELIGIBLE, a declividade não pode ser superior a 45 graus
           expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND max_slope_degrees > 45)"
           name: "check_eligible_properties_satellite_limit"
 
-      # NOVO TESTE: REGRA DO GRANDE JUIZ (MAPBIOMAS)
       - dbt_utils.expression_is_true:
-          # Se for ELIGIBLE, não pode ter desmatamento confirmado pós-2008
           expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND mapbiomas_deforested_ha > 0.1)"
           name: "check_eligible_properties_mapbiomas_limit"
+
+      - dbt_utils.expression_is_true:
+          expression: "protected_area_overlap_ha <= (area_ha + 0.01)"
+          name: "check_physical_limit_protected_area_overlap"
+          
+      - dbt_utils.expression_is_true:
+          expression: "mapbiomas_deforested_ha <= (area_ha + 0.01)"
+          name: "check_physical_limit_mapbiomas_overlap"
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (protected_area_overlap_ha > 0.1 AND final_eligibility_status NOT LIKE 'NOT ELIGIBLE%')"
+          name: "check_protected_area_hard_block_priority"
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (rl_status = 'EXEMPT' AND rl_deficit_ha > 0)"
+          name: "check_legal_reserve_coherence"
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (eudr_deforested_ha > 0 AND mapbiomas_detection_date <= '2020-12-31')"
+          name: "check_eudr_date_coherence"
+
+      - dbt_utils.expression_is_true:
+          expression: "embargo_date <= CURRENT_DATE() OR embargo_date IS NULL"
+          name: "check_no_future_embargo_dates"
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (final_eligibility_status = 'NOT ELIGIBLE - SOCIAL' AND (slave_labor_offender IS NULL OR slave_labor_offender = ''))"
+          name: "check_social_block_has_evidence"
+
+      - dbt_utils.expression_is_true:
+          expression: "NOT (final_eligibility_status = 'WARNING - RISK BY ADJACENCY' AND (adjacency_details IS NULL OR adjacency_details = ''))"
+          name: "check_adjacency_warning_has_details"
+
+      - dbt_utils.expression_is_true:
+          expression: "estimated_financial_liability_brl >= 0"
+          name: "check_liability_is_not_negative"
+
+      - dbt_utils.expression_is_true:
+          expression: "estimated_financial_liability_brl = (liability_deforestation_brl + liability_rl_brl + liability_protected_areas_brl + liability_social_brl + liability_app_brl)"
+          name: "check_liability_math_sum"
+
+      - dbt_utils.expression_is_true:
+          expression: "latitude BETWEEN -34.0 AND 6.0 AND longitude BETWEEN -74.0 AND -34.0"
+          name: "check_coordinates_inside_brazil"
+
+      - dbt_utils.expression_is_true:
+          expression: "area_ha < 2000000"
+          name: "check_area_realistic_limit"
+
+      - dbt_utils.expression_is_true:
+          expression: "(ST_AREA(geometry) / 10000) <= (area_ha * 1.20)"
+          name: "check_declared_vs_drawn_area_fraud"
+          config:
+            severity: warn
+
+      - dbt_utils.expression_is_true:
+          expression: "ST_AREA(geometry) > 0"
+          name: "check_geometry_is_not_empty"
 
     columns:
       - name: area_ha
@@ -45,22 +98,23 @@ models:
               values: [
                 'ELIGIBLE', 
                 'NOT ELIGIBLE - SOCIAL', 
-                'NOT ELIGIBLE - TRADITIONAL TERRITORY',
+                'NOT ELIGIBLE - TRADITIONAL TERRITORY', 
                 'NOT ELIGIBLE - CAR STATUS', 
-                'NOT ELIGIBLE - IBAMA AMAZON (CMN 5.081)',
+                'NOT ELIGIBLE - IBAMA AMAZON (CMN 5.081)', 
                 'NOT ELIGIBLE - IBAMA', 
-                'NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)', # <--- NOVO STATUS ADICIONADO
-                'NOT ELIGIBLE - CONSERVATION UNIT',
-                'NOT ELIGIBLE - SATELLITE',
+                'NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)', 
+                'NOT ELIGIBLE - CONSERVATION UNIT', 
+                'NOT ELIGIBLE - SATELLITE', 
                 'NOT ELIGIBLE - EUDR VIOLATION (POST-2020)',
+                'NOT ELIGIBLE - INVALID GEOMETRY', # ADICIONADO
+                'WARNING - HIGH CAR OVERLAP',      # ADICIONADO
                 'WARNING - BORDERLINE SLOPE', 
                 'AWAITING CLEARANCE', 
-                'WARNING - OLD EMBARGO',
+                'WARNING - OLD EMBARGO', 
                 'WARNING - RISK BY ADJACENCY', 
                 'CONDITIONAL - RL DEFICIT'
               ]
 
-      # ---- TESTES DE QUALIDADE E MÉTRICAS DE SATÉLITE ----
       - name: max_slope_degrees
         description: "Inclinação máxima detectada pelo SRTM."
         data_tests:
@@ -75,7 +129,6 @@ models:
               min_value: -1
               max_value: 1
 
-      # ---- MÉTRICAS AMBIENTAIS E ESPACIAIS ----
       - name: embargo_area_ha
         description: "Área total embargada dentro do imóvel."
         data_tests:
@@ -98,3 +151,16 @@ models:
         description: "Status do cadastro no SICAR (Ativo, Suspenso, Cancelado)."
         data_tests:
           - not_null
+
+      # ---- NOVAS COLUNAS ADICIONADAS (PASSO 1) ----
+      - name: biome_name
+        description: "Bioma da propriedade. CRÍTICO para a regra CMN 5.081 do Banco Central."
+        data_tests:
+          - not_null
+
+      - name: estimated_financial_liability_brl
+        description: "Passivo financeiro total estimado."
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"

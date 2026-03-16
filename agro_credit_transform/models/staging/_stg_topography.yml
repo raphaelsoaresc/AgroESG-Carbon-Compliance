@@ -30,7 +30,7 @@ models:
         description: "Classificação do relevo baseada na média (Padrão Embrapa)."
         data_tests:
           - accepted_values:
-              values: ['PLANO', 'SUAVE ONDULADO', 'ONDULADO', 'FORTE ONDULADO', 'MONTANHOSO/ESCARPADO']
+              values: ['PLANO', 'SUAVE ONDULADO', 'ONDULADO', 'FORTE ONDULADO', 'MONTANHOSO', 'ESCARPADO']
 
       - name: ndvi_mean
         description: "Média do índice de vegetação (NDVI) nos últimos 90 dias."
@@ -52,5 +52,32 @@ models:
 
       - name: processed_at
         description: "Timestamp da extração dos dados de satélite."
+        data_tests:
+          - not_null
+
+  # =================================================================
+  # NOVO MODELO (stg_property_app_ndvi)
+  # =================================================================
+  - name: stg_property_app_ndvi
+    description: "NDVI cirúrgico das zonas de APP (margens de rios) limpo e deduplicado."
+    columns:
+      - name: property_id
+        description: "ID único da propriedade (vinculado ao CAR/SIGEF)."
+        data_tests:
+          - unique
+          - not_null
+
+      - name: app_ndvi_mean
+        description: "Média do NDVI apenas na área de APP recortada."
+
+      - name: app_vegetation_status
+        description: "Classificação da saúde da vegetação na APP (HEALTHY, RECOVERING, DEGRADED)."
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['HEALTHY_APP', 'RECOVERING_APP', 'DEGRADED_APP', 'CLOUD_COVERED'] # <--- ESPAÇO CORRIGIDO AQUI TAMBÉM!
+
+      - name: is_app_violation_risk
+        description: "Flag booleana indicando se há risco de violação na APP (NDVI < 0.4)."
         data_tests:
           - not_null

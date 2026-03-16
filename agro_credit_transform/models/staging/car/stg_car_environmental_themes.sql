@@ -8,19 +8,19 @@ WITH source_data AS (
     SELECT * FROM {{ source('raw_data', 'car_temas_ambientais') }}
 ),
 
--- Normaliza os números (troca vírgula por ponto)
+-- Simplificado: Conversão direta para FLOAT64 sem REPLACEs desnecessários
 cleaned_source AS (
     SELECT
         registro_car as property_id,
         file_hash,
         ingested_at,
         
-        SAFE_CAST(REPLACE(REPLACE(area_reserva_legal_proposta, '.', ''), ',', '.') AS FLOAT64) as rl_prop,
-        SAFE_CAST(REPLACE(REPLACE(area_reserva_legal_averbada, '.', ''), ',', '.') AS FLOAT64) as rl_averb,
-        SAFE_CAST(REPLACE(REPLACE(area_preservacao_permanente, '.', ''), ',', '.') AS FLOAT64) as app,
-        SAFE_CAST(REPLACE(REPLACE(area_remanescente_vegetacao_nativa, '.', ''), ',', '.') AS FLOAT64) as native_veg,
-        SAFE_CAST(REPLACE(REPLACE(area_rural_consolidada, '.', ''), ',', '.') AS FLOAT64) as consolidated,
-        SAFE_CAST(REPLACE(REPLACE(area_uso_restrito, '.', ''), ',', '.') AS FLOAT64) as restricted
+        SAFE_CAST(area_reserva_legal_proposta AS FLOAT64) as rl_prop,
+        SAFE_CAST(area_reserva_legal_averbada AS FLOAT64) as rl_averb,
+        SAFE_CAST(area_preservacao_permanente AS FLOAT64) as app,
+        SAFE_CAST(area_remanescente_vegetacao_nativa AS FLOAT64) as native_veg,
+        SAFE_CAST(area_rural_consolidada AS FLOAT64) as consolidated,
+        SAFE_CAST(area_uso_restrito AS FLOAT64) as restricted
     FROM source_data
 ),
 
@@ -46,6 +46,7 @@ deduplicated AS (
             ORDER BY ingested_at DESC
         ) as row_num
     FROM unpivoted
+    -- Removemos áreas nulas ou zeradas para não poluir o dashboard
     WHERE theme_area_ha IS NOT NULL AND theme_area_ha > 0
 )
 

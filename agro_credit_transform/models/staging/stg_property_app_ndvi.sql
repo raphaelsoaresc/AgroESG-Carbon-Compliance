@@ -21,10 +21,13 @@ WITH raw_app_data AS (
         CAST(analysis_start_date AS DATE) as analysis_start_date,
         CAST(analysis_end_date AS DATE) as analysis_end_date,
         'Sentinel-2 (Surgical APP Audit)' as data_source
-    FROM {{ source('raw_data', 'raw_ee_app_ndvi') }} 
+    FROM {{ source('raw_data', 'raw_ee_app_ndvi') }}
+
+    WHERE property_id IS NOT NULL
 
     {% if is_incremental() %}
-        WHERE CAST(processed_at AS TIMESTAMP) > (SELECT MAX(processed_at) FROM {{ this }})
+        -- O FILTRO INCREMENTAL AGORA USA 'AND' (pois já existe um WHERE acima)
+        AND CAST(processed_at AS TIMESTAMP) > (SELECT MAX(processed_at) FROM {{ this }})
     {% endif %}
 )
 

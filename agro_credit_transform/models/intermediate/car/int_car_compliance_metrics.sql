@@ -29,15 +29,16 @@ biome_match AS (
     SELECT
         p.property_id,
         ref.restriction_name as biome_name,
-        ref.legal_reserve_perc, -- Já vem 0.80, 0.35 ou 0.20 da sua tabela!
+        ref.legal_reserve_perc, 
         ST_DISTANCE(p.centroid, ref.geometry) as dist
     FROM properties p
     INNER JOIN {{ ref('int_brazil_reference_geometries') }} ref
         ON ref.restriction_type = 'BIOME'
-        AND ST_DWITHIN(p.centroid, ref.geometry, 1000) -- Tolerância 1km
+        -- AUMENTAMOS A TOLERÂNCIA PARA 50KM (50000 metros)
+        -- Isso garante que fazendas na costa, ilhas ou desenhadas no mar achem o bioma mais próximo
+        AND ST_DWITHIN(p.centroid, ref.geometry, 50000) 
     QUALIFY ROW_NUMBER() OVER(PARTITION BY p.property_id ORDER BY dist ASC) = 1
 )
-
 SELECT 
     p.property_id,
     p.area_ha as total_area_ha,

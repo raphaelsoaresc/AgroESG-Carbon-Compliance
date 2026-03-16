@@ -93,8 +93,11 @@ models:
         description: "CPF/CNPJ do infrator limpo."
         data_tests:
           - not_null
+          # Removido o 'unique' daqui, pois existem infratores reincidentes na vida real
       - name: employer_name
         description: "Nome do empregador em UPPER CASE."
+        data_tests:
+          - not_null # BLINDAGEM: Como é usado como chave de JOIN na fct, não pode ser nulo
       - name: inclusion_date
         data_tests:
           - not_null
@@ -121,3 +124,12 @@ models:
           - not_null
       - name: registration_status
         description: "Situação do cadastro (Ativo, Pendente, etc)."
+
+  # --- ADICIONADO PARA COMPLETAR A LINHA DE DEFESA ---
+  - name: stg_car_overlaps
+    description: "Sobreposições nativas do SICAR (TIs, UCs, etc)."
+    columns:
+      - name: property_id
+        description: "ID do CAR. Não é unique pois uma fazenda pode cruzar com TI e UC ao mesmo tempo."
+        data_tests:
+          - not_null

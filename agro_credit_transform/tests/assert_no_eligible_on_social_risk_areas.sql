@@ -1,3 +1,8 @@
+{{ config(
+    tags=['fct_compliance_risk']
+) }}
+
+
 WITH risk_areas AS (
     SELECT DISTINCT car_property_id
     FROM {{ ref('int_compliance__final_spatial_check') }}
