@@ -8,22 +8,21 @@
   # 2. Variáveis de Ambiente
   env = {
     GREET = "AgroESG ELT Pipeline";
+    LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
     
     # --- Airflow ---
     AIRFLOW_HOME = "${toString config.env.DEVENV_ROOT}/airflow";
     AIRFLOW__CORE__LOAD_EXAMPLES = "False";
-    # Usamos \$ para que o Shell resolva a variável do seu .env em tempo de execução
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN = "postgresql+psycopg2://admin:\${AIRFLOW_DB_PASS}@127.0.0.1:5432/airflow_db";
     AIRFLOW__CORE__EXECUTOR = "LocalExecutor";
     
     PYTHONPATH = "${toString config.env.DEVENV_ROOT}";
 
     # --- DuckDB / GCP ---
-    # Dica: Certifique-se de que este .json esteja no seu .gitignore!
     GOOGLE_APPLICATION_CREDENTIALS = "${toString config.env.DEVENV_ROOT}/config/gcp_credentials.json";
   };
 
-  # 3. Python + UV
+  # 3. Linguagens
   languages.python = {
     enable = true;
     version = "3.11";
@@ -31,7 +30,22 @@
     venv.enable = true;
   };
 
-  # 4. Pacotes do Sistema
+  languages.javascript = {
+    enable = true;
+    package = pkgs.nodejs_20; 
+    npm.enable = true;
+  };
+
+  # 4. Processos (Gerenciados pelo 'devenv up')
+  processes = {
+    # O Next.js v15+ com Tailwind v4 cuida do CSS automaticamente via PostCSS
+    frontend.exec = "cd caipora-frontend && npm run dev";
+    
+    # Airflow (Opcional: descomente se quiser que inicie junto com o 'up')
+    # airflow.exec = "airflow standalone";
+  };
+
+  # 5. Pacotes do Sistema
   packages = with pkgs; [
     duckdb
     google-cloud-sdk
@@ -39,38 +53,38 @@
     stdenv.cc.cc.lib
   ];
 
-  # 5. Serviços (Postgres)
+  # 6. Serviços (Postgres)
   services.postgres = {
     enable = true;
     package = pkgs.postgresql_17;
     listen_addresses = "127.0.0.1";
     initialDatabases = [{ name = "airflow_db"; }];
-    # O initialScript do devenv roda em um ambiente que já carregou o .env
     initialScript = ''
       DO $$ 
       BEGIN
         IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'admin') THEN
-          -- O comando 'format' evita problemas de sintaxe com a senha vinda da variável
           EXECUTE format('CREATE USER admin WITH PASSWORD %L SUPERUSER', session_user);
         END IF;
       END $$;
     '';
   };
 
-  # 6. Scripts Auxiliares
+  # 7. Scripts Auxiliares
   scripts = {
     setup-project.exec = ''
-      echo "🔄 Instalando dependências..."
+      echo "📦 Instalando dependências do Frontend (Next.js + Tailwind v4)..."
+      cd caipora-frontend && npm install tailwindcss@next @tailwindcss/postcss@next postcss
+      cd ..
+
+      echo "🔄 Instalando dependências Python..."
       uv pip install -e .
 
       echo "🦆 Configurando DuckDB..."
       duckdb -c "INSTALL spatial; INSTALL httpfs;"
 
       echo "🐘 Inicializando Banco de Dados do Airflow..."
-      # O Postgres precisa estar rodando para isso funcionar
       airflow db migrate
 
-      # Usamos a variável do .env também para a senha da interface do Airflow
       airflow users create \
         --username admin \
         --firstname Admin \
@@ -86,7 +100,7 @@
     clean-env.exec = "rm -rf .devenv/state airflow/logs airflow/*.cfg && echo '🗑️ Limpeza concluída.'";
   };
 
-  # 7. Inicialização Automática
+  # 8. Inicialização Automática
   enterShell = ''
     echo "--------------------------------------------------------"
     echo "🌾 AGRO ESG CARBON COMPLIANCE - AMBIENTE ELT"

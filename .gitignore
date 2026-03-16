@@ -1,35 +1,33 @@
 # =======================================================
-# 1. SEGURANÇA E CREDENCIAIS (DO SEU ARQUIVO ORIGINAL)
+# 1. SEGURANÇA E CREDENCIAIS
 # =======================================================
-# Arquivo JSON da Service Account do BigQuery
-agroesg-carbon-compliance-f462eb0bb473.json
+# Chaves de Service Account do Google Cloud
 *.json
+!package.json
+!package-lock.json
 credentials.json
-# Arquivos de ambiente e configurações locais
+
+# Configurações locais e segredos
 .env
+.env.local
 profiles.yml
 user.yml
 .DS_Store
 
 # =======================================================
-# 2. AIRFLOW (NOVO - CRÍTICO PARA O STANDALONE)
+# 2. AIRFLOW (Standalone & Local)
 # =======================================================
-# O banco de dados local muda a cada segundo, não deve subir
 airflow/airflow.db
 airflow/*.db
-# Logs de execução podem ficar gigantes
 airflow/logs/
-# Arquivos de processo (travas)
 airflow/*.pid
 airflow/*.err
-# Senha gerada automaticamente (SEGURANÇA MÁXIMA)
 airflow/standalone_admin_password.txt
-# Configurações web locais
 airflow/webserver_config.py
-# Airflow logs
 *.out
+
 # =======================================================
-# 3. dbt (DO SEU ARQUIVO ORIGINAL)
+# 3. dbt
 # =======================================================
 target/
 dbt_packages/
@@ -38,49 +36,36 @@ logs/
 *.log
 
 # =======================================================
-# 4. DADOS E GIS (DO SEU ARQUIVO ORIGINAL + PARQUET)
+# 4. DADOS E GIS (Arquivos Pesados)
 # =======================================================
-# Ignora bases brutas do IBAMA/SIGEF e arquivos temporários de mapas
 *.csv
+*.parquet
+*.geoparquet
+*.gz
+*.zip
 *.shp
 *.shx
 *.dbf
 *.prj
 *.cpg
-*.zip
-# Adicionado: O formato que o DuckDB vai gerar
-*.parquet
-*.gz
-*.geoparquet
-data/raw/
-data/staging/
-data/archive/
-data/processed/
+data/
+
 # =======================================================
-# 5. PYTHON E AMBIENTES VIRTUAIS (DO SEU ARQUIVO ORIGINAL)
+# 5. PYTHON E AMBIENTES VIRTUAIS
 # =======================================================
 __pycache__/
 *.py[oc]
+.venv/
+venv/
+.devenv/
 build/
 dist/
-wheels/
 *.egg-info
-.venv
-venv/
 
 # =======================================================
-# 6. FERRAMENTAS E IDEs (DO SEU ARQUIVO ORIGINAL)
+# 6. FERRAMENTAS E IDEs
 # =======================================================
 .vscode/
 .idea/
 .ipynb_checkpoints
-.pre-commit-config.yaml
-
-# =======================================================
-# 7. DEVENV & DIRENV (DO SEU ARQUIVO ORIGINAL)
-# =======================================================
-.devenv*
-devenv.local.nix
-devenv.local.yaml
-.direnv
-.user.yml
+.direnv/
