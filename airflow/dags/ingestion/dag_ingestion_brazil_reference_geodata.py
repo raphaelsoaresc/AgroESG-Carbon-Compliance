@@ -6,18 +6,18 @@ import duckdb
 from airflow import DAG
 from airflow.utils.task_group import TaskGroup
 from airflow.operators.python import PythonOperator
-from airflow.sensors.python import PythonSensor  # <--- CORREÇÃO AQUI
+from airflow.sensors.python import PythonSensor
 from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
 from airflow.operators.bash import BashOperator
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
-# --- CONFIGURAÇÕES (Padrão solicitado)
+# --- CONFIGURAÇÕES
 PROJECT_ID = os.getenv("GCP_PROJECT_ID")
 BUCKET_NAME = os.getenv("GCP_BUCKET_NAME")
 DATASET_ID = "agro_esg_raw"
 STAGING_PATH = "./data/staging"
 
+# REMOVIDO O INCRA DAQUI
 SOURCES = {
     'ibge': {
         'table_id': "ibge_biomes",
@@ -28,11 +28,6 @@ SOURCES = {
         'table_id': "funai_terras_indigenas",
         'raw_path': "./data/raw/funai",
         'archive_path': "./data/archive/funai"
-    },
-    'incra': {
-        'table_id': "incra_quilombolas",
-        'raw_path': "./data/raw/incra",
-        'archive_path': "./data/archive/incra"
     }
 }
 
@@ -48,7 +43,7 @@ default_args = {
 def check_for_files(path):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
-    files = [f for f in os.listdir(path) if f.endswith(('.zip', '.shp'))]
+    files =[f for f in os.listdir(path) if f.endswith(('.zip', '.shp'))]
     return len(files) > 0
 
 def process_reference_geo_file(source_key, ti):
@@ -56,7 +51,7 @@ def process_reference_geo_file(source_key, ti):
     raw_path = conf['raw_path']
     extracted_files_list = []
     
-    files = [f for f in os.listdir(raw_path) if f.endswith(('.zip', '.shp'))]
+    files =[f for f in os.listdir(raw_path) if f.endswith(('.zip', '.shp'))]
     if not files:
         raise FileNotFoundError(f"Nenhum arquivo encontrado em {raw_path}")
     
@@ -72,7 +67,7 @@ def process_reference_geo_file(source_key, ti):
             with zipfile.ZipFile(full_path, 'r') as zip_ref:
                 extracted_files_list = zip_ref.namelist()
                 zip_ref.extractall(raw_path)
-                shps = [f for f in extracted_files_list if f.endswith('.shp')]
+                shps =[f for f in extracted_files_list if f.endswith('.shp')]
                 if shps:
                     working_path = os.path.join(raw_path, shps[0])
                 else:
@@ -118,13 +113,11 @@ with DAG(
     tags=['bronze', 'reference', 'duckdb'],
 ) as dag:
 
-    task_groups = []
+    task_groups =[]
 
     for source_id, config in SOURCES.items():
         with TaskGroup(group_id=f'group_{source_id}') as tg:
             
-            # 1. Definimos o ID da tarefa de processamento para usar no XCom
-            # Isso evita confusão com as aspas dentro do Jinja
             process_task_id = f"group_{source_id}.process_{source_id}_with_duckdb"
             
             wait_for_file = PythonSensor(
@@ -142,7 +135,6 @@ with DAG(
                 op_kwargs={'source_key': source_id}
             )
 
-            # 2. Upload GCS: Usando concatenação simples (+) em vez de f-string com chaves quádruplas
             upload_to_gcs = LocalFilesystemToGCSOperator(
                 task_id=f'upload_{source_id}_parquet_to_gcs',
                 src="{{ ti.xcom_pull(task_ids='" + process_task_id + "', key='output_path') }}",
@@ -151,12 +143,11 @@ with DAG(
                 gcp_conn_id='google_cloud_default'
             )
 
-            # 3. Load BQ: Corrigindo a URI que estava vindo com "}}" no final
             load_to_bq = BigQueryInsertJobOperator(
                 task_id=f'load_{source_id}_to_bigquery_bronze',
                 configuration={
                     "load": {
-                        "sourceUris": [
+                        "sourceUris":[
                             f"gs://{BUCKET_NAME}/bronze/reference/{source_id}/" + 
                             "{{ ti.xcom_pull(task_ids='" + process_task_id + "', key='output_filename') }}"
                         ],
@@ -172,7 +163,6 @@ with DAG(
                 }
             )
 
-            # 4. Archive: Limpando a sintaxe do Bash
             archive_original = BashOperator(
                 task_id=f'archive_{source_id}_original_file',
                 bash_command="""
@@ -193,11 +183,4 @@ with DAG(
             wait_for_file >> process_file >> upload_to_gcs >> load_to_bq >> archive_original
             task_groups.append(tg)
 
-    trigger_dbt = TriggerDagRunOperator(
-        task_id='trigger_dbt_transformation',
-        trigger_dag_id='dbt_transformation_medallion',
-        wait_for_completion=False,
-        reset_dag_run=True
-    )
-
-    task_groups >> trigger_dbt
+    task_groups

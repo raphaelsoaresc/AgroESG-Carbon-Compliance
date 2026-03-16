@@ -3,11 +3,23 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# Carregamento do .env (Deve ser um dos primeiros comandos)
+from dotenv import load_dotenv
+load_dotenv() 
+
+# --- INJEÇÃO DE CONFIGURAÇÕES PARA O TERMINAL ---
+# Isso permite que o dag.test() encontre a conexão sem precisar do banco do Airflow
+os.environ["AIRFLOW_CONN_CAIPORA_API_CONN"] = os.getenv("API_URL", "http://localhost:8000")
+
 # Imports do Airflow
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
 from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator
+try:
+    from airflow.providers.http.operators.http import SimpleHttpOperator
+except ImportError:
+    from airflow.providers.http.operators.http import HttpOperator as SimpleHttpOperator
 
 # Imports Cosmos (dbt)
 from cosmos import DbtTaskGroup, ProjectConfig, ProfileConfig, ExecutionConfig, RenderConfig
@@ -20,10 +32,10 @@ import geopandas as gpd
 from google.cloud import bigquery
 from shapely import wkt
 
-# --- CONFIGURAÇÕES DE AMBIENTE (Estilo IBAMA) ---
+# --- CONFIGURAÇÕES DE AMBIENTE ---
 PROJECT_ID = os.getenv("GCP_PROJECT_ID")
-BUCKET_NAME = os.getenv("GCP_BUCKET_NAME") # Certifique-se que esta var existe
-STAGING_PATH = os.getenv("STAGING_PATH", "/tmp") # Fallback para /tmp se não definido
+BUCKET_NAME = os.getenv("GCP_BUCKET_NAME")
+STAGING_PATH = os.getenv("STAGING_PATH", "/tmp")
 
 # Caminhos do dbt
 BASE_DIR = Path(__file__).resolve().parents[3]
@@ -46,14 +58,13 @@ profile_config = ProfileConfig(
     ),
 )
 
-# --- FUNÇÃO PYTHON (Processamento) ---
+# --- FUNÇÃO PYTHON (Processamento de GeoParquet) ---
 def generate_compliance_geoparquet(**kwargs):
     ti = kwargs['ti']
     
     print("🛰️ Iniciando extração do BigQuery para GeoParquet...")
     client = bigquery.Client()
     
-    # Query na tabela final gerada pelo dbt
     table_id = f"{PROJECT_ID}.agro_esg_marts.fct_compliance_risk"
     query = f"SELECT * FROM `{table_id}`"
     
@@ -62,34 +73,35 @@ def generate_compliance_geoparquet(**kwargs):
     if df.empty:
         raise ValueError(f"A tabela {table_id} está vazia.")
 
-    # Conversão para GeoDataFrame (Essencial para a API ler rápido)
     if 'geometry' in df.columns:
         print("🗺️ Convertendo WKT para Geometria...")
-        # Se o BQ retornar WKT (string), converte. Se já vier bytes, ajusta conforme necessário.
-        # Geralmente via client python vem como string WKT ou objeto shapely se usar biblioteca certa.
-        # Assumindo string WKT padrão do BQ:
         try:
-            df['geometry'] = df['geometry'].apply(lambda x: wkt.loads(x) if isinstance(x, str) else x)
+            # BRECHA 1: Tratamento de nulos para as "Fazendas Invisíveis"
+            df['geometry'] = df['geometry'].apply(
+                lambda x: wkt.loads(x) if pd.notnull(x) and isinstance(x, str) else None
+            )
             gdf = gpd.GeoDataFrame(df, geometry='geometry', crs="EPSG:4326")
+            
+            null_geoms = gdf['geometry'].isnull().sum()
+            if null_geoms > 0:
+                print(f"⚠️ Aviso: {null_geoms} propriedades sem geometria incluídas no arquivo.")
         except Exception as e:
             print(f"Erro na conversão de geometria: {e}")
             raise
     else:
-        raise ValueError("Coluna 'geometry' não encontrada na tabela fct_compliance_risk.")
+        raise ValueError("Coluna 'geometry' não encontrada na tabela fato.")
 
-    # Limpeza de tipos de data (DuckDB prefere datetime nativo do Python)
+    # Padronização de datas para compatibilidade DuckDB/API
     for col in gdf.columns:
         if 'date' in col.lower() or 'timestamp' in col.lower():
             gdf[col] = pd.to_datetime(gdf[col])
 
-    # Definição do nome do arquivo
     file_name = "fct_compliance_latest.parquet"
     output_path = os.path.join(STAGING_PATH, file_name)
     
     print(f"💾 Salvando GeoParquet em: {output_path}")
     gdf.to_parquet(output_path, index=False, compression='snappy')
     
-    # Envia o nome do arquivo para o XCom (para a próxima task usar)
     ti.xcom_push(key='parquet_filename', value=file_name)
 
 # --- DEFINIÇÃO DA DAG ---
@@ -104,7 +116,7 @@ with DAG(
     tags=["dbt", "gold", "api", "geoparquet"],
 ) as dag:
 
-    # 1. Grupo de Transformação dbt
+    # 1. Transformação dbt (Inclui novas regras de sobreposição e passivos)
     dbt_transform_group = DbtTaskGroup(
         group_id="dbt_transform",
         project_config=ProjectConfig(
@@ -118,19 +130,24 @@ with DAG(
         ),
         render_config=RenderConfig(
             load_method=LoadMode.DBT_MANIFEST,
-            test_behavior=TestBehavior.AFTER_EACH,
+            test_behavior=TestBehavior.AFTER_ALL,
             select=["+fct_compliance_risk"],
+            emit_datasets=False, 
         ),
+        # SOLUÇÃO: Passa o argumento direto para o operador, ignorando o construtor do Config
+        operator_args={
+            "install_deps": True,
+        },
     )
-
-    # 2. Gera o Arquivo Local (Igual ao process_ibama_file)
+    
+    # 2. Geração do GeoParquet
     generate_parquet_task = PythonOperator(
         task_id='generate_compliance_geoparquet',
         python_callable=generate_compliance_geoparquet,
         provide_context=True
     )
 
-    # 3. Upload para o GCS (Igual ao upload_to_gcs do IBAMA)
+    # 3. Upload para o Bucket GCS
     upload_to_gcs_task = LocalFilesystemToGCSOperator(
         task_id='upload_parquet_to_gcs',
         src=os.path.join(STAGING_PATH, "{{ ti.xcom_pull(task_ids='generate_compliance_geoparquet', key='parquet_filename') }}"),
@@ -138,14 +155,21 @@ with DAG(
         bucket=BUCKET_NAME,
         gcp_conn_id='google_cloud_default',
         mime_type='application/octet-stream',
-        
-        # --- ADICIONE ESTAS LINHAS ---
         chunk_size=5 * 1024 * 1024,
-        execution_timeout=timedelta(minutes=30), # Dá 30 min para a task rodar antes do Airflow matar
-        retries=3, # Tenta 3 vezes se falhar
+        execution_timeout=timedelta(minutes=30),
+        retries=3,
     )
 
-    # 4. Limpeza Local (Opcional, mas boa prática igual ao archive do IBAMA)
+    # 4. Notificação para a API (Refresh Automático)
+    refresh_api_task = SimpleHttpOperator(
+        task_id='refresh_api_data',
+        method='POST',
+        http_conn_id='caipora_api_conn',
+        endpoint='/admin/refresh-data',
+        headers={"X-API-Key": os.getenv("API_PASSWORD")}, # Envia a senha em texto plano do .env
+    )   
+
+    # 5. Limpeza do arquivo temporário local
     clean_local_file_task = BashOperator(
         task_id='clean_local_file',
         bash_command=(
@@ -154,5 +178,9 @@ with DAG(
         )
     )
 
-    # Fluxo: dbt -> Gera Parquet -> Upload GCS -> Limpa Local
-    dbt_transform_group >> generate_parquet_task >> upload_to_gcs_task >> clean_local_file_task
+    # Fluxo de Execução
+    dbt_transform_group >> generate_parquet_task >> upload_to_gcs_task >> refresh_api_task >> clean_local_file_task
+
+    if __name__ == "__main__":
+        # Permite rodar via: python dag_dbt_transform.py
+        dag.test()

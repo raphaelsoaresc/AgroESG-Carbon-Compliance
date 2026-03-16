@@ -17,9 +17,9 @@ BUCKET_NAME = os.getenv("GCP_BUCKET_NAME")
 DATASET_ID = os.getenv("BQ_DATASET_ID")
 TABLE_ID = "ibama_history"
 
-RAW_PATH = os.getenv("RAW_PATH_IBAMA")
-STAGING_PATH = os.getenv("STAGING_PATH")
-ARCHIVE_PATH = os.getenv("ARCHIVE_PATH_IBAMA")
+RAW_PATH = os.getenv("RAW_PATH_IBAMA", "./data/raw/ibama")
+STAGING_PATH = os.getenv("STAGING_PATH", "./data/staging")
+ARCHIVE_PATH = os.getenv("ARCHIVE_PATH_IBAMA", "./data/archive/ibama")
 
 default_args = {
     'owner': 'airflow',
@@ -186,11 +186,5 @@ with DAG(
         )
     )
 
-    trigger_dbt = TriggerDagRunOperator(
-        task_id='trigger_dbt_transformation',
-        trigger_dag_id='dbt_transformation_medallion',
-        wait_for_completion=False,
-        reset_dag_run=True
-    )
 
-    wait_for_file >> process_file >> upload_to_gcs >> load_to_bq >> archive_original >> trigger_dbt
+    wait_for_file >> process_file >> upload_to_gcs >> load_to_bq >> archive_original

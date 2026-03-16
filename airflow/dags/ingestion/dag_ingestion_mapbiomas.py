@@ -292,14 +292,9 @@ with DAG(
         """
     )
 
-    trigger_dbt = TriggerDagRunOperator(
-        task_id='trigger_dbt',
-        trigger_dag_id='dbt_transformation_medallion',
-        reset_dag_run=True
-    )
 
     process_task >> upload_gcs >> branch_task
     branch_task >> load_shapes >> join_tasks
     branch_task >> load_crossings >> join_tasks
     branch_task >> join_tasks
-    join_tasks >> archive_task >> trigger_dbt
+    join_tasks >> archive_task

@@ -8,7 +8,6 @@ from airflow import DAG
 from airflow.decorators import task
 from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
 from airflow.providers.google.cloud.hooks.gcs import GCSHook
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 # Configurações de Resiliência
 default_args = {
@@ -22,14 +21,13 @@ default_args = {
 with DAG(
     'satellite_app_auditor_pipeline',
     default_args=default_args,
-    description='Auditoria Cirúrgica de NDVI em APPs Hídricas (Versão Final - Fix Loop Infinito)',
-    schedule_interval=timedelta(minutes=30),
-    max_active_runs=3,
+    description='Auditoria de NDVI em APPs - Versão com LEFT JOIN para Cobertura 100%',
+    schedule="@continuous",  # Roda continuamente, mas o filtro incremental garante que só processe novos grids
+    max_active_runs=1,
     catchup=False,
-    tags=['satellite', 'gee', 'app', 'compliance', 'medallion'],
+    tags=['satellite', 'gee', 'app', 'compliance'],
 ) as dag:
 
-    # --- TAREFA 1: FILTRO INCREMENTAL SEGURO ---
     @task
     def get_grids_to_process():
         hook = BigQueryHook(gcp_conn_id='google_cloud_default')
@@ -37,37 +35,31 @@ with DAG(
         dataset_id = "agro_esg_raw"
         table_id = "raw_ee_app_ndvi"
 
-        # Verifica se a tabela existe
-        table_exists = hook.table_exists(
-            project_id=project_id,
-            dataset_id=dataset_id,
-            table_id=table_id
-        )
+        table_exists = hook.table_exists(project_id=project_id, dataset_id=dataset_id, table_id=table_id)
 
         if table_exists:
-            logging.info(f"Tabela {table_id} encontrada. Filtrando grids não processados...")
-            # O LEFT JOIN agora funcionará corretamente pois grids vazios terão registro na tabela
+            # CORREÇÃO: Faz o JOIN pelo property_id, mas retorna o grid_id.
+            # Assim, se faltar UMA fazenda no grid, o grid inteiro é retornado para reprocessamento.
+            # (O BigQuery vai sobrescrever/duplicar as que já existem, mas garante os 100%)
             sql = f"""
                 SELECT DISTINCT t1.grid_id 
                 FROM `{project_id}.agro_esg_intermediate.int_car_grid_mapping` t1
                 LEFT JOIN `{project_id}.{dataset_id}.{table_id}` t2 
-                    ON t1.grid_id = t2.grid_id
-                WHERE t2.grid_id IS NULL
-                LIMIT 500
+                    ON t1.property_id = t2.property_id
+                WHERE t2.property_id IS NULL
+                LIMIT 1000
             """
         else:
-            logging.info(f"Tabela {table_id} não existe. Processando carga inicial...")
             sql = f"""
                 SELECT DISTINCT grid_id 
                 FROM `{project_id}.agro_esg_intermediate.int_car_grid_mapping` 
-                LIMIT 500
+                LIMIT 1000
             """
-        
+
         records = hook.get_pandas_df(sql, dialect='standard')
         return records['grid_id'].tolist() if not records.empty else []
 
-    # --- TAREFA 2: PROCESSADOR ESPACIAL (GEE -> GCS) ---
-    @task(pool='gee_api_pool', max_active_tis_per_dag=12)
+    @task(pool='gee_api_pool', max_active_tis_per_dag=10)
     def process_app_satellite(grid_id: str):
         logging.info(f"Iniciando Auditoria de APP para o grid {grid_id}")
         
@@ -76,7 +68,8 @@ with DAG(
         bq_hook = BigQueryHook(gcp_conn_id='google_cloud_default')
         project_id = bq_hook.project_id
 
-        # SQL Espacial
+        # SQL Espacial - MUDANÇA PARA LEFT JOIN
+        # Isso traz todas as propriedades do grid, cruzando ou não com APP
         sql = f"""
             WITH app_zones AS (
                 SELECT geometry FROM `{project_id}.agro_esg_intermediate.int_brazil_reference_geometries` 
@@ -92,34 +85,53 @@ with DAG(
                 p.property_id, 
                 ST_AsGeoJSON(ST_UNION_AGG(ST_INTERSECTION(p.geometry, a.geometry))) as app_geometry_json
             FROM prop_geoms p
-            INNER JOIN app_zones a ON ST_INTERSECTS(p.geometry, a.geometry)
+            LEFT JOIN app_zones a ON ST_INTERSECTS(p.geometry, a.geometry)
             GROUP BY 1
         """
         
         df_geoms = bq_hook.get_pandas_df(sql, dialect='standard')
-        
-        # Inicializa variáveis de controle
         rows = []
-        has_data = False
 
-        # Se houver geometrias, tenta processar no GEE
         if not df_geoms.empty:
             app_features_list = []
+            
+            # Separa quem tem APP de quem não tem
             for _, r in df_geoms.iterrows():
-                geom_dict = json.loads(r['app_geometry_json'])
-                if geom_dict and geom_dict.get('coordinates'):
-                    app_features_list.append({'property_id': r['property_id'], 'geometry': geom_dict})
+                geom_str = r['app_geometry_json']
+                
+                # Se a fazenda cruza com APP (JSON válido e não nulo)
+                if pd.notna(geom_str) and geom_str != 'null':
+                    geom_dict = json.loads(geom_str)
+                    if geom_dict and geom_dict.get('coordinates'):
+                        app_features_list.append({'property_id': r['property_id'], 'geometry': geom_dict})
+                    else:
+                        # Caso o ST_INTERSECTION resulte em algo vazio
+                        rows.append({
+                            'property_id': r['property_id'], 'grid_id': grid_id,
+                            'app_ndvi_mean': None, 'app_ndvi_min': None, 'app_ndvi_max': None,
+                            'processed_at': datetime.now().isoformat(),
+                            'analysis_start_date': start_date, 'analysis_end_date': end_date,
+                            'status': 'NO_APP_INTERSECTION'
+                        })
+                else:
+                    # Fazenda SEM APP: Adicionamos direto com NDVI nulo
+                    rows.append({
+                        'property_id': r['property_id'],
+                        'grid_id': grid_id,
+                        'app_ndvi_mean': None, 'app_ndvi_min': None, 'app_ndvi_max': None,
+                        'processed_at': datetime.now().isoformat(),
+                        'analysis_start_date': start_date, 'analysis_end_date': end_date,
+                        'status': 'NO_APP_INTERSECTION'
+                    })
 
+            # Processa no GEE apenas as que têm APP
             if app_features_list:
                 from utils.gee_handler import initialize_gee, get_ndvi_stats
                 initialize_gee()
-                
                 try:
-                    logging.info(f"Calculando NDVI para {len(app_features_list)} polígonos...")
+                    logging.info(f"Calculando NDVI para {len(app_features_list)} propriedades com APP no grid {grid_id}")
                     ndvi_results = get_ndvi_stats(app_features_list, start_date, end_date)
-                    
                     if ndvi_results:
-                        has_data = True
                         for res in ndvi_results:
                             rows.append({
                                 'property_id': res['properties']['property_id'],
@@ -128,35 +140,35 @@ with DAG(
                                 'app_ndvi_min': res['properties'].get('min'),
                                 'app_ndvi_max': res['properties'].get('max'),
                                 'processed_at': datetime.now().isoformat(),
-                                'analysis_start_date': start_date,
-                                'analysis_end_date': end_date,
+                                'analysis_start_date': start_date, 'analysis_end_date': end_date,
                                 'status': 'SUCCESS'
                             })
                 except Exception as e:
                     logging.error(f"Erro no GEE para {grid_id}: {str(e)}")
-                    # Não marcamos has_data=True, então cairá no bloco de registro fantasma com erro
+                    for feat in app_features_list:
+                        rows.append({
+                            'property_id': feat['property_id'], 'grid_id': grid_id,
+                            'app_ndvi_mean': None, 'app_ndvi_min': None, 'app_ndvi_max': None,
+                            'processed_at': datetime.now().isoformat(),
+                            'analysis_start_date': start_date, 'analysis_end_date': end_date,
+                            'status': 'GEE_ERROR'
+                        })
 
-        # --- LÓGICA DE CORREÇÃO DE LOOP INFINITO ---
-        # Se não houve dados (seja por falta de APP ou erro), cria registro vazio
-        if not has_data:
-            status_reason = 'NO_APP_INTERSECTION' if df_geoms.empty else 'GEE_NO_DATA_OR_ERROR'
-            logging.warning(f"Grid {grid_id} sem dados válidos ({status_reason}). Criando registro fantasma.")
-            
+        # Se o grid estiver totalmente vazio no mapeamento
+        if not rows:
+            logging.warning(f"Grid {grid_id} sem propriedades mapeadas.")
             rows.append({
-                'property_id': None, # BigQuery aceita null
+                'property_id': 'GRID_VAZIO',
                 'grid_id': grid_id,
-                'app_ndvi_mean': None,
-                'app_ndvi_min': None,
-                'app_ndvi_max': None,
+                'app_ndvi_mean': None, 'app_ndvi_min': None, 'app_ndvi_max': None,
                 'processed_at': datetime.now().isoformat(),
-                'analysis_start_date': start_date,
-                'analysis_end_date': end_date,
-                'status': status_reason
+                'analysis_start_date': start_date, 'analysis_end_date': end_date,
+                'status': 'EMPTY_GRID'
             })
 
         df_results = pd.DataFrame(rows)
 
-        # Garante tipos numéricos mesmo com Nulls (essencial para Parquet)
+        # Correção de tipos para evitar erros no Parquet/BigQuery
         cols_to_fix = ['app_ndvi_mean', 'app_ndvi_min', 'app_ndvi_max']
         for col in cols_to_fix:
             df_results[col] = pd.to_numeric(df_results[col], errors='coerce').astype(float)
@@ -173,26 +185,17 @@ with DAG(
         
         return f"gs://{bucket_name}/{destination_path}"
 
-    # --- TAREFA 3: CARREGADOR (GCS -> BIGQUERY) ---
     @task
     def load_app_to_bq(file_paths: list):
-        # Proteção contra lista vazia ou None vindo do upstream
-        if not file_paths:
-            logging.info("Lista de arquivos vazia. Nada a fazer.")
-            return None
-
-        valid_paths = [p for p in file_paths if p is not None]
-        
-        if not valid_paths:
-            logging.info("Nenhum caminho de arquivo válido encontrado.")
+        if not file_paths or all(p is None for p in file_paths):
+            logging.info("Nenhum arquivo para carregar.")
             return None
 
         bq_hook = BigQueryHook(gcp_conn_id='google_cloud_default')
         
-        # Configuração de carga com Schema Evolution
         job_config = {
             "load": {
-                "sourceUris": valid_paths, 
+                "sourceUris": [p for p in file_paths if p], 
                 "destinationTable": {
                     "projectId": bq_hook.project_id,
                     "datasetId": "agro_esg_raw",
@@ -201,30 +204,14 @@ with DAG(
                 "sourceFormat": "PARQUET",
                 "writeDisposition": "WRITE_APPEND",
                 "createDisposition": "CREATE_IF_NEEDED",
-                # Permite adicionar a coluna 'status' se ela não existir na tabela
                 "schemaUpdateOptions": ["ALLOW_FIELD_ADDITION"] 
             }
         }
         
-        logging.info(f"Carregando {len(valid_paths)} arquivos Parquet no BigQuery...")
-        try:
-            bq_hook.insert_job(configuration=job_config)
-            return "Carga Finalizada"
-        except Exception as e:
-            logging.error(f"Falha ao carregar BigQuery: {e}")
-            raise e
+        bq_hook.insert_job(configuration=job_config)
+        return "Carga Finalizada"
 
-    # --- TAREFA 4: TRIGGER DBT ---
-    trigger_dbt_transformation = TriggerDagRunOperator(
-        task_id='trigger_dbt_transformation',
-        trigger_dag_id='dbt_transformation_medallion',
-        wait_for_completion=False,
-        reset_dag_run=True
-    )
-
-    # Fluxo de Execução
+    # Fluxo
     grids = get_grids_to_process()
     processed_files = process_app_satellite.expand(grid_id=grids)
-    load_status = load_app_to_bq(processed_files)
-    
-    load_status >> trigger_dbt_transformation
+    load_app_to_bq(processed_files)

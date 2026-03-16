@@ -217,11 +217,5 @@ with DAG(
         )
     )
 
-    trigger_dbt = TriggerDagRunOperator(
-        task_id='trigger_dbt_transformation',
-        trigger_dag_id='dbt_transformation_medallion',
-        wait_for_completion=False,
-        reset_dag_run=True
-    )
 
-    wait_for_file >> process_file >> upload_to_gcs >> load_to_bq >> archive_original >> trigger_dbt
+    wait_for_file >> process_file >> upload_to_gcs >> load_to_bq >> archive_original

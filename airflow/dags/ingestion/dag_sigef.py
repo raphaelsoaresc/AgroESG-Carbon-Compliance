@@ -32,9 +32,9 @@ def create_dag(uf, bbox=None):
     TABLE_ID = f"sigef_history_{uf.lower()}"
     
     # 2. Lendo os caminhos base do seu .env
-    BASE_RAW_PATH = os.getenv("RAW_PATH_SIGEF")
-    BASE_STAGING_PATH = os.getenv("STAGING_PATH")
-    BASE_ARCHIVE_PATH = os.getenv("ARCHIVE_PATH_SIGEF")
+    BASE_RAW_PATH = os.getenv("RAW_PATH_SIGEF", "./data/raw/sigef")
+    BASE_STAGING_PATH = os.getenv("STAGING_PATH", "./data/staging")
+    BASE_ARCHIVE_PATH = os.getenv("ARCHIVE_PATH_SIGEF", "./data/archive/sigef")
 
     # 3. Montando os caminhos específicos para a UF atual
     RAW_PATH = os.path.join(BASE_RAW_PATH, uf.upper())
@@ -190,15 +190,9 @@ def create_dag(uf, bbox=None):
             }
         )
 
-        trigger_dbt = TriggerDagRunOperator(
-            task_id='trigger_dbt_transformation',
-            trigger_dag_id='dbt_transformation_medallion',
-            wait_for_completion=False,
-            reset_dag_run=True
-        )
 
         # Orquestração
-        wait_for_file >> process_file >> upload_to_gcs >> load_to_bq >> archive_original >> trigger_dbt
+        wait_for_file >> process_file >> upload_to_gcs >> load_to_bq >> archive_original
     
     return dag
 

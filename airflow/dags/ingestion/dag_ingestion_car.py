@@ -214,11 +214,5 @@ with DAG(
 
             wait >> process >> upload >> load >> archive
 
-    trigger_dbt = TriggerDagRunOperator(
-        task_id='trigger_dbt_transformation',
-        trigger_dag_id='dbt_transformation_medallion',
-        wait_for_completion=False,
-        reset_dag_run=True
-    )
     
-    [tg for tg in dag.task_group_dict.values() if isinstance(tg, TaskGroup)] >> trigger_dbt
+    [tg for tg in dag.task_group_dict.values() if isinstance(tg, TaskGroup)]

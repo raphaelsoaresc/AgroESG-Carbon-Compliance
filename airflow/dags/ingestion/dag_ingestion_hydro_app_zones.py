@@ -202,10 +202,4 @@ with DAG(
 
             wait >> process >> upload >> load >> archive
 
-    trigger_dbt = TriggerDagRunOperator(
-        task_id='trigger_dbt',
-        trigger_dag_id='dbt_transformation_medallion',
-        wait_for_completion=False
-    )
-
-    tg >> trigger_dbt
+    tg
