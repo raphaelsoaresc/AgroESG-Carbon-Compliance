@@ -53,26 +53,35 @@ class ComplianceResponse(BaseModel):
     total_area_ha: float
     verdict: str
     city: str
-    uf: str = Field(..., description="Unidade Federativa") # Novo campo
+    uf: str = Field(..., description="Unidade Federativa")
     car_status: str = Field(..., description="Status do CAR (Ativo, Pendente, Suspenso)")
-    max_slope_degrees: float = Field(..., description="Declividade máxima encontrada (importante para crédito agrícola)")
+    max_slope_degrees: float = Field(..., description="Declividade máxima encontrada")
     
-    # --- GEOMETRIA ---
-    geometry: Optional[Dict[str, Any]] = Field(
-        None, 
-        description="Geometria da propriedade em formato GeoJSON (Point, Polygon, etc)"
-    )
-
-    # --- NOVOS CAMPOS FINANCEIROS E ESPACIAIS ---
+    geometry: Optional[Dict[str, Any]] = Field(None, description="Geometria da propriedade")
     financial_liabilities: Optional[FinancialLiabilities] = None
-    satellite_image_date: Optional[datetime] = Field(None, description="Data da imagem de satélite utilizada na análise")
-    protected_area_overlap_ha: float = Field(0.0, description="Sobreposição com áreas protegidas (UCs) em hectares")
+    satellite_image_date: Optional[datetime] = Field(None, description="Data da imagem")
+    protected_area_overlap_ha: float = Field(0.0, description="Sobreposição com áreas protegidas")
 
-    environmental_score: EnvironmentalScore
-    deforestation_metrics: DeforestationMetrics 
-    social_score: SocialScore
-    risk_analysis: RiskAnalysis
+    # 👇 MUDE ESTAS 4 LINHAS PARA OPTIONAL 👇
+    environmental_score: Optional[EnvironmentalScore] = None
+    deforestation_metrics: Optional[DeforestationMetrics] = None
+    social_score: Optional[SocialScore] = None
+    risk_analysis: Optional[RiskAnalysis] = None
 
 class CSVUploadResponse(BaseModel):
     total_processed: int
     results: List[ComplianceResponse]
+
+# --- NOVA CLASSE ADICIONADA AQUI (Faltava isso!) ---
+class PolygonRequest(BaseModel):
+    wkt: Optional[str] = Field(
+        None, 
+        description="Geometria em formato Well-Known Text (WKT)",
+        examples=["POLYGON((-48.5 -22.5, -48.4 -22.5, -48.4 -22.6, -48.5 -22.6, -48.5 -22.5))"]
+    )
+    geojson: Optional[Dict] = Field(
+        None, 
+        description="Geometria em formato GeoJSON",
+        examples=[{"type": "Point", "coordinates":[-48.5, -22.5]}]
+    )
+    reference_id: Optional[str] = Field(None, example="REF-123")
