@@ -69,3 +69,4 @@ dist/
 .idea/
 .ipynb_checkpoints
 .direnv/
+deploy-staging.sh

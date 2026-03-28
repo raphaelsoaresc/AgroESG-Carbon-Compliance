@@ -8,7 +8,19 @@
   # 2. Variáveis de Ambiente
   env = {
     GREET = "AgroESG ELT Pipeline";
-    LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
+    
+    # --- LD_LIBRARY_PATH: Nomes corrigidos para o Nixpkgs ---
+    LD_LIBRARY_PATH = lib.makeLibraryPath [
+      pkgs.stdenv.cc.cc.lib
+      pkgs.expat
+      pkgs.gdal
+      pkgs.geos      # Corrigido: No Nix é 'geos', não 'libgeos'
+      pkgs.proj
+      pkgs.zlib
+      pkgs.libtiff
+      pkgs.libjpeg
+      pkgs.libpng
+    ];
     
     # --- Airflow ---
     AIRFLOW_HOME = "${toString config.env.DEVENV_ROOT}/airflow";
@@ -38,19 +50,23 @@
 
   # 4. Processos (Gerenciados pelo 'devenv up')
   processes = {
-    # O Next.js v15+ com Tailwind v4 cuida do CSS automaticamente via PostCSS
     frontend.exec = "cd caipora-frontend && npm run dev";
-    
-    # Airflow (Opcional: descomente se quiser que inicie junto com o 'up')
-    # airflow.exec = "airflow standalone";
   };
 
-  # 5. Pacotes do Sistema
+  # 5. Pacotes do Sistema (Nomes validados para Nix)
   packages = with pkgs; [
     duckdb
     google-cloud-sdk
     zlib
     stdenv.cc.cc.lib
+    # Dependências para GIS/Satélite
+    expat
+    gdal
+    geos   # Corrigido aqui também
+    proj
+    libtiff
+    libjpeg
+    libpng
   ];
 
   # 6. Serviços (Postgres)
