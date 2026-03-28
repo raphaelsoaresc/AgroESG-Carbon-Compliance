@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { margin: 1cm; }
+        body { font-family: 'Helvetica', 'Arial', sans-serif; color: #2c3e50; font-size: 10px; line-height: 1.4; }
+        .header { width: 100%; border-bottom: 3px solid #1a5276; padding-bottom: 5px; margin-bottom: 10px; }
+        .logo { font-size: 20px; font-weight: bold; color: #1a5276; }
+        
+        /* Badges de Status - Classes Fixas sem Jinja interno */
+        .badge { padding: 12px; text-align: center; font-weight: bold; font-size: 15px; margin: 10px 0; border: 1px solid #333; border-radius: 4px; }
+        .status-eligible { background-color: #e8f5e9; color: #2e7d32; border-color: #2e7d32; }
+        .status-warning { background-color: #fffde7; color: #9a7d0a; border-color: #fbc02d; }
+        .status-not-eligible { background-color: #fdedec; color: #943126; border-color: #943126; }
+
+        .section-title { background: #1a5276; color: white; padding: 5px 10px; text-transform: uppercase; font-size: 9px; margin-top: 15px; letter-spacing: 1px; }
+        .data-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+        .data-table td { border: 1px solid #d5dbdb; padding: 8px; vertical-align: top; width: 25%; }
+        .label { font-size: 7px; color: #7f8c8d; text-transform: uppercase; display: block; margin-bottom: 2px; }
+        .value { font-weight: bold; font-size: 10px; }
+        
+        .map-box { width: 100%; border: 1px solid #d5dbdb; margin-top: 5px; text-align: center; background: #f9f9f9; }
+        .map-img { width: 100%; height: auto; max-height: 380px; display: block; }
+        .evidence-box { font-family: monospace; font-size: 9px; background: #f4f6f7; padding: 12px; border-left: 4px solid #1a5276; margin-top: 5px; white-space: pre-wrap; }
+        .footer { position: fixed; bottom: 0; width: 100%; font-size: 8px; color: #95a5a6; text-align: center; border-top: 1px solid #eee; padding-top: 5px; }
+    </style>
+</head>
+<body>
+    <table style="width: 100%;" class="header">
+        <tr>
+            <td><div class="logo">CAIPORA SENTINELA</div></td>
+            <td style="text-align:right;"><strong>CERTIFICADO DE AUDITORIA</strong><br>ID: {{ data.property_id }}</td>
+        </tr>
+    </table>
+
+    <!-- Lógica de Status movida para fora do CSS -->
+    {% set status = data.final_eligibility_status %}
+    {% set css_class = 'status-not-eligible' if 'NOT' in status else 'status-warning' if ('WARNING' in status or 'CONDITIONAL' in status or 'DEFICIT' in status) else 'status-eligible' %}
+    
+    <div class="badge {{ css_class }}">
+        STATUS DA PROPRIEDADE: {{ status }}
+    </div>
+
+    <div class="section-title">Mapa de Delimitação e Contexto Geoespacial (Alta Resolução)</div>
+<div style="width: 100%; border: 2px solid #1a5276; margin-top: 5px; background: #000;">
+    <!-- Removido o padding para a imagem de satélite sangrar até a borda, fica muito mais pro -->
+    <img src="data:image/png;base64,{{ map_b64 }}" style="width:100%; display: block;">
+</div>
+<div style="background: #1a5276; color: white; font-size: 8px; padding: 2px 10px; text-align: right;">
+    Coordenadas Centroide: {{ data.latitude }}, {{ data.longitude }} | Sensor: Esri World Imagery (D+7)
+</div>
+
+    <div class="section-title">Identificação e Localização</div>
+    <table class="data-table">
+        <tr>
+            <td><span class="label">Município / UF</span><span class="value">{{ data.city }} / {{ data.uf_origem }}</span></td>
+            <td><span class="label">Área Total Analisada</span><span class="value">{{ "{:,.2f}".format(data.area_ha|float) }} ha</span></td>
+            <td><span class="label">Bioma Principal</span><span class="value">{{ data.biome_name }}</span></td>
+            <td><span class="label">Status CAR</span><span class="value">{{ data.car_status }}</span></td>
+        </tr>
+    </table>
+
+    <div class="section-title">Demonstrativo de Passivos Financeiros (R$)</div>
+    <table class="data-table">
+        <tr style="background:#fdedec;">
+            <td colspan="2"><span class="label">ESTIMATIVA TOTAL DE PASSIVOS</span><span class="value" style="font-size:16px; color:#943126;">R$ {{ "{:,.2f}".format(data.estimated_financial_liability_brl|float) }}</span></td>
+            <td><span class="label">DÉFICIT RL (ÁREA)</span><span class="value">{{ "{:,.2f}".format(data.rl_deficit_ha|float) }} ha</span></td>
+            <td><span class="label">DESMATAMENTO (ÁREA)</span><span class="value">{{ "{:,.2f}".format(data.mapbiomas_deforested_ha|float) }} ha</span></td>
+        </tr>
+        <tr>
+            <td><span class="label">Multa Desmatamento</span><span class="value">R$ {{ "{:,.2f}".format(data.liability_deforestation_brl|float) }}</span></td>
+            <td><span class="label">Multa Reserva Legal</span><span class="value">R$ {{ "{:,.2f}".format(data.liability_rl_brl|float) }}</span></td>
+            <td><span class="label">Multa Social (Escravo)</span><span class="value">R$ {{ "{:,.2f}".format(data.liability_social_brl|float) }}</span></td>
+            <td><span class="label">Unid. de Conservação</span><span class="value">R$ {{ "{:,.2f}".format(data.liability_protected_areas_brl|float) }}</span></td>
+        </tr>
+    </table>
+
+    <div class="section-title">Métricas Biofísicas e Conformidade EUDR</div>
+    <table class="data-table">
+        <tr>
+            <td><span class="label">NDVI MÉDIO GERAL</span><span class="value">{{ "{:,.2f}".format(data.general_ndvi_mean|float) }}</span></td>
+            <td><span class="label">DECLIVIDADE MÁXIMA</span><span class="value">{{ "{:,.1f}".format(data.max_slope_degrees|float) }}°</span></td>
+            <td><span class="label">COMPLIANCE EUDR</span><span class="value">{{ '⚠️ VIOLAÇÃO' if data.eudr_deforested_ha|float > 0 else '✅ CONFORME' }}</span></td>
+            <td><span class="label">ÚLTIMO SENSORIAMENTO</span><span class="value">{{ data.satellite_image_date }}</span></td>
+        </tr>
+    </table>
+
+    <div class="section-title">Evidências Técnicas Consolidadas</div>
+    <div class="evidence-box">{{ data.technical_evidence }}</div>
+
+    <div class="footer">
+        Documento gerado em {{ now.strftime('%d/%m/%Y %H:%M') }} | Motor de Decisão Caipora v4.1 <br>
+        As análises baseiam-se em dados públicos e algoritmos proprietários de Risk Automation.
+    </div>
+</body>
+</html>
