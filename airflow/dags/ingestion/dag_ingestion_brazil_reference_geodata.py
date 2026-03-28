@@ -28,7 +28,35 @@ SOURCES = {
         'table_id': "funai_terras_indigenas",
         'raw_path': "./data/raw/funai",
         'archive_path': "./data/archive/funai"
-    }
+    },
+    # --- NOVAS FONTES INCRA ---
+    'incra_quilombolas': {
+        'table_id': "incra_quilombolas",
+        'raw_path': "./data/raw/incra_quilombolas",
+        'archive_path': "./data/archive/incra_quilombolas"
+    },
+    'incra_assentamentos': {
+        'table_id': "incra_assentamentos",
+        'raw_path': "./data/raw/incra_assentamentos",
+        'archive_path': "./data/archive/incra_assentamentos"
+    },
+    # --- NOVAS FONTES SEMA-MT (REFERÊNCIA) ---
+    'intermat_assentamentos': {
+        'table_id': "intermat_assentamentos",
+        'raw_path': "./data/raw/intermat",
+        'archive_path': "./data/archive/intermat"
+    },
+    'sema_ucs': {
+        'table_id': "sema_unidades_conservacao",
+        'raw_path': "./data/raw/sema_uc",
+        'archive_path': "./data/archive/sema_uc"
+    },
+    # --- NOVAS FONTES ICMBio (FEDERAL) ---
+    'icmbio_ucs': {
+        'table_id': "icmbio_unidades_conservacao",
+        'raw_path': "./data/raw/icmbio_uc",
+        'archive_path': "./data/archive/icmbio_uc"
+    },
 }
 
 default_args = {
