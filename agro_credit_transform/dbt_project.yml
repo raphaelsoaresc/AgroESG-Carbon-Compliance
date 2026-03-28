@@ -24,7 +24,8 @@ vars:
   forest_code_threshold_date: '2008-07-22'
   
   # Limite de tolerância para ruído de GPS/GIS (em hectares e %)
-  gis_noise_ha_threshold: 0.1
+  # AJUSTE EUDR: Reduzido de 0.1 para 0.01 para evitar omissão de desmatamento pós-2020.
+  gis_noise_ha_threshold: 0.01
   gis_noise_pct_threshold: 0.005
 
   # --- Multiplicadores de Risco Financeiro (Brecha 3) ---
@@ -34,12 +35,6 @@ vars:
   fine_slave_labor_fixed: 500000
   fine_app_violation_fixed: 50000
   fine_rl_deficit_per_ha: 5000
-
-  # --- OTIMIZAÇÃO ESPACIAL (Bounding Box para Mato Grosso) ---
-  bbox_min_lon: -62.0  # Oeste do MT
-  bbox_max_lon: -46.0  # Leste do MT
-  bbox_min_lat: -18.5  # Sul do MT
-  bbox_max_lat: -7.0   # Norte do MT
 
 # ---------------------------------------------------------------
 # 2. CONFIGURAÇÃO DOS MODELOS

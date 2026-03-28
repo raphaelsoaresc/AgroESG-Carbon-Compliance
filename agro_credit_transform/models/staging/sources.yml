@@ -2,8 +2,7 @@ version: 2
 
 sources:
   - name: raw_data
-    description: "Landing Zone: Dados brutos de fontes externas (SIGEF, IBAMA, CAR, MTE, GEE, MapBiomas) populados via Airflow/DuckDB."
-    # project: "{{ env_var('GCP_PROJECT_ID') }}" # Removido comentário para manter estrutura original
+    description: "Landing Zone: Dados brutos de fontes externas (SIGEF, IBAMA, CAR, MTE, GEE, MapBiomas, SEMA-MT, INCRA, ICMBio) populados via Airflow/DuckDB."
     dataset: agro_esg_raw
 
     tables:
@@ -16,9 +15,11 @@ sources:
           - name: max_slope
             description: "Declividade máxima encontrada no polígono."
 
-      # --- REGULARIDADE FUNDIÁRIA E AMBIENTAL ---
-      
-      # Tabelas do SIGEF separadas por UF
+
+      - name: raw_ee_consolidated
+        description: "Métricas consolidadas de satélite processadas via GEE."
+
+      # --- REGULARIDADE FUNDIÁRIA E AMBIENTAL (SIGEF) ---
       - name: sigef_history_mt
         description: "Histórico de certificações de imóveis rurais no SIGEF - Mato Grosso."
         columns: &hash_control
@@ -37,8 +38,10 @@ sources:
         description: "Histórico de certificações de imóveis rurais no SIGEF - Pará."
         columns: *hash_control
 
-      # --- TABELAS DO CAR ---
-      
+      - name: sigef_history
+        description: "Base histórica consolidada de certificações SIGEF."
+
+      # --- TABELAS DO CAR (GEOMETRIAS E TEMAS) ---
       - name: car_area_imovel_geometria_mt
         description: "Geometria espacial (WKT) das propriedades rurais do CAR - Mato Grosso."
         columns: &car_geom_columns
@@ -69,33 +72,43 @@ sources:
       - name: car_sobreposicao
         description: "Cálculos de sobreposição nativos do SICAR com TIs e UCs."
 
-      # --- RESTRITIVOS SOCIOAMBIENTAIS E BIOMAS (COM FRESHNESS) ---
+      # --- COMPLIANCE: EMBARGOS E LISTA SUJA (COM FRESHNESS) ---
       - name: ibama_history
         description: "Histórico de áreas embargadas pelo IBAMA."
-        # BLINDAGEM DE FRESHNESS: O dbt vai dar erro se a tabela não for atualizada há mais de 7 dias
-        freshness:
+        freshness: &compliance_freshness
           warn_after: {count: 3, period: day}
           error_after: {count: 7, period: day}
-        loaded_at_field: ingestion_timestamp # Substitua pela coluna de data de ingestão da sua tabela
+        loaded_at_field: ingested_at
+        columns: *hash_control
+
+      - name: sema_mt_embargos
+        description: "Base histórica de áreas embargadas pela SEMA-MT (Polígonos)."
+        freshness: *compliance_freshness
+        loaded_at_field: ingested_at
+        columns: *hash_control
+
+      - name: siga_mt_embargos
+        description: "Novos embargos registrados no sistema SIGA da SEMA-MT (Polígonos)."
+        freshness: *compliance_freshness
+        loaded_at_field: ingested_at
+        columns: *hash_control
+
+      - name: icmbio_embargos
+        description: "Áreas embargadas em Unidades de Conservação Federais pelo ICMBio."
+        freshness: *compliance_freshness
+        loaded_at_field: ingested_at
         columns: *hash_control
 
       - name: mte_slave_labor_history
         description: "Lista Suja do MTE - Trabalho análogo à escravidão."
         freshness:
-          warn_after: {count: 3, period: day}
-          error_after: {count: 7, period: day}
-        loaded_at_field: ingestion_timestamp # Substitua pela coluna de data de ingestão
+          warn_after: {count: 90, period: day}
+          error_after: {count: 180, period: day}
+        loaded_at_field: ingested_at
         columns:
           - <<: *hash_control
           - name: cnpjcpf
             description: "CPF/CNPJ do infrator para cruzamento de malha."
-
-      - name: ibge_biomes
-        description: "Malha digital de biomas brasileiros (Escala 1:250.000)."
-        columns:
-          - <<: *hash_control
-          - name: wkt_geometry
-            description: "Geometria convertida para EPSG:4326."
 
       # --- MONITORAMENTO DE DESMATAMENTO (MAPBIOMAS) ---
       - name: mapbiomas_alertas_shapes
@@ -118,7 +131,14 @@ sources:
           - name: alertid
             description: "ID do alerta correspondente."
 
-      # --- TERRITÓRIOS PROTEGIDOS E HIDROGRAFIA ---
+      # --- TERRITÓRIOS PROTEGIDOS E REFERÊNCIA (ESTÁTICOS) ---
+      - name: ibge_biomes
+        description: "Malha digital de biomas brasileiros (Escala 1:250.000)."
+        columns:
+          - <<: *hash_control
+          - name: wkt_geometry
+            description: "Geometria convertida para EPSG:4326."
+
       - name: funai_terras_indigenas  
         description: "Polígonos de Terras Indígenas (FUNAI) em todas as fases."
         columns: *hash_control
@@ -127,6 +147,23 @@ sources:
         description: "Territórios Quilombolas delimitados pelo INCRA."
         columns: *hash_control
 
+      - name: incra_assentamentos
+        description: "Polígonos de Assentamentos de Reforma Agrária Federais (INCRA)."
+        columns: *hash_control
+
+      - name: intermat_assentamentos
+        description: "Polígonos de Assentamentos de Reforma Agrária Estaduais (INTERMAT-MT)."
+        columns: *hash_control
+
+      - name: icmbio_unidades_conservacao
+        description: "Limites oficiais das Unidades de Conservação Federais (ICMBio)."
+        columns: *hash_control
+
+      - name: sema_unidades_conservacao
+        description: "Limites oficiais das Unidades de Conservação Estaduais (SEMA-MT)."
+        columns: *hash_control
+
+      # --- HIDROGRAFIA ---
       - name: ana_app_zones
         description: "Zonas de APP geradas via DuckDB (BHO Nível 07 - Strahler)."
         columns:
@@ -135,11 +172,3 @@ sources:
 
       - name: ibge_bc250_app_zones
         description: "Zonas de APP de massas d'água (lagos/represas) da BC250."
-
-      - name: raw_ee_app_ndvi
-        description: "NDVI cirúrgico das zonas de APP (margens de rios) via GEE."
-        columns:
-          - name: property_id
-            description: "ID único da propriedade (vinculado ao CAR)."
-          - name: app_ndvi_mean
-            description: "Média do NDVI apenas na área de APP recortada."

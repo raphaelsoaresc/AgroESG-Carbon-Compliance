@@ -9,10 +9,25 @@ WITH alerts AS (
     SELECT 
         alert_id,
         detection_date,
-        -- Apenas para garantir que temos a data
-        detection_year
+        detection_year,
+        -- Evidência Bitemporal (Perícia)
+        image_date_before,
+        image_date_after,
+        -- Classificação e Prova
+        land_use_class,
+        mapbiomas_url,
+        -- Áreas de sobreposição oficiais (Double Check)
+        total_alert_ha,
+        overlap_indigenous_ha,
+        overlap_quilombola_ha,
+        overlap_settlement_ha,
+        -- Regra EUDR: Desmatamento após 31/12/2020
+        CASE 
+            WHEN detection_date > '2020-12-31' THEN TRUE 
+            ELSE FALSE 
+        END AS is_post_eudr_cutoff
     FROM {{ ref('stg_mapbiomas_alertas') }}
-    -- REGRA DO GRANDE JUIZ: Marco Temporal (22 de Julho de 2008)
+    -- Marco Temporal Legal (Lei 12.651/2012)
     WHERE detection_date >= '2008-07-22'
 ),
 
@@ -25,10 +40,30 @@ crossings AS (
 )
 
 SELECT
+    -- Chaves
     c.car_code,
     c.alert_id,
+    
+    -- Temporalidade e Severidade
     a.detection_date,
-    c.overlap_area_ha as deforestation_overlap_ha
+    a.image_date_before,
+    a.image_date_after,
+    a.land_use_class,
+    
+    -- Métricas de Área (Cruzamento Local vs Oficial)
+    c.overlap_area_ha as deforestation_overlap_ha,
+    a.total_alert_ha as official_total_alert_ha,
+    
+    -- Flags de Risco e Compliance
+    a.is_post_eudr_cutoff,
+    
+    -- Auditoria de Sobreposições (Double Check)
+    a.overlap_indigenous_ha as official_overlap_indigenous_ha,
+    a.overlap_quilombola_ha as official_overlap_quilombola_ha,
+    a.overlap_settlement_ha as official_overlap_settlement_ha,
+    
+    -- Link para Laudo
+    a.mapbiomas_url
 
 FROM crossings c
 INNER JOIN alerts a ON c.alert_id = a.alert_id

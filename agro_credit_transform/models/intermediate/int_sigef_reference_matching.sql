@@ -24,7 +24,6 @@ biomes_match AS (
         ref.is_hard_block,
         ref.priority_level,
         ref.file_hash as ref_file_hash,
-        ref.source_filename as ref_source_filename,
         ref.ingested_at as ref_ingested_at,
         -- A distância servirá para o QUALIFY pegar o bioma mais próximo/correto
         ST_DISTANCE(p.centroid, ref.geometry) as dist_score
@@ -47,7 +46,6 @@ hard_blocks_match AS (
         ref.is_hard_block,
         ref.priority_level,
         ref.file_hash as ref_file_hash,
-        ref.source_filename as ref_source_filename,
         ref.ingested_at as ref_ingested_at,
         0 as dist_score
     FROM property_base p

@@ -6,7 +6,9 @@
 ) }}
 
 WITH properties AS (
-    SELECT property_id, geometry 
+    SELECT 
+        property_id, 
+        geometry_raw as geometry
     FROM {{ ref('int_car_geometries') }}
 ),
 
@@ -18,7 +20,8 @@ hard_blocks AS (
         geometry
     FROM {{ ref('int_brazil_reference_geometries') }}
     WHERE is_hard_block = TRUE
-    AND restriction_type IN ('INDIGENOUS_LAND', 'QUILOMBOLA', 'CONSERVATION_UNIT')
+    -- Adicionado 'SETTLEMENT' na lista de Hard Blocks
+    AND restriction_type IN ('INDIGENOUS_LAND', 'QUILOMBOLA', 'CONSERVATION_UNIT', 'SETTLEMENT')
 ),
 
 intersections AS (
@@ -30,13 +33,17 @@ intersections AS (
     FROM properties p
     INNER JOIN hard_blocks hb
         ON ST_INTERSECTS(p.geometry, hb.geometry)
-    WHERE ST_AREA(ST_INTERSECTION(p.geometry, hb.geometry)) / 10000 > 0.1
+    WHERE ST_AREA(ST_INTERSECTION(p.geometry, hb.geometry)) / 10000 > 0.0001
 )
 
 SELECT
     property_id,
-    ARRAY_AGG(STRUCT(restriction_type, restriction_name, overlap_ha)) as overlaps_details,
-    SUM(overlap_ha) as total_overlap_ha,
+    ARRAY_AGG(STRUCT(
+        restriction_type, 
+        restriction_name, 
+        ROUND(overlap_ha, 4) as overlap_ha
+    )) as overlaps_details,
+    ROUND(SUM(overlap_ha), 4) as total_overlap_ha,
     TRUE as has_hard_block_overlap
 FROM intersections
 GROUP BY 1

@@ -1,79 +1,54 @@
 {{ config(
     materialized='table',
     schema='agro_esg_intermediate',
-    cluster_by='property_id',
-    tags=['car']
+    cluster_by=['property_id']
 ) }}
 
--- 1. Pega os dados declarados (Pivotando os temas para colunas)
-WITH themes_pivoted AS (
-    SELECT
-        property_id,
-        SUM(CASE WHEN theme_name = 'RESERVA_LEGAL_AVERBADA' THEN theme_area_ha ELSE 0 END) as rl_averbada_ha,
-        SUM(CASE WHEN theme_name = 'RESERVA_LEGAL_PROPOSTA' THEN theme_area_ha ELSE 0 END) as rl_proposta_ha,
-        SUM(CASE WHEN theme_name = 'APP' THEN theme_area_ha ELSE 0 END) as app_declared_ha,
-        SUM(CASE WHEN theme_name = 'VEGETACAO_NATIVA' THEN theme_area_ha ELSE 0 END) as native_veg_ha,
-        SUM(CASE WHEN theme_name = 'AREA_CONSOLIDADA' THEN theme_area_ha ELSE 0 END) as consolidated_area_ha
-    FROM {{ ref('stg_car_environmental_themes') }}
-    GROUP BY 1
-),
+WITH unioned AS (
+    SELECT 
+        property_id, total_area_ha, biome_name, total_rl_declared_ha, 
+        total_app_declared_ha, total_native_veg_ha, legal_reserve_perc, 
+        required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
+    FROM {{ ref('int_car_compliance_mt') }}
+    
+    UNION ALL
+    
+    SELECT 
+        property_id, total_area_ha, biome_name, total_rl_declared_ha, 
+        total_app_declared_ha, total_native_veg_ha, legal_reserve_perc, 
+        required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
+    FROM {{ ref('int_car_compliance_pa') }}
+    
+    UNION ALL
+    
+    SELECT 
+        property_id, total_area_ha, biome_name, total_rl_declared_ha, 
+        total_app_declared_ha, total_native_veg_ha, legal_reserve_perc, 
+        required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
+    FROM {{ ref('int_car_compliance_ro') }}
 
--- 2. Pega a geometria do imóvel
-properties AS (
-    SELECT property_id, area_ha, centroid 
-    FROM {{ ref('int_car_geometries') }}
-),
 
--- 3. Descobre o Bioma usando sua tabela de referência
-biome_match AS (
-    SELECT
-        p.property_id,
-        ref.restriction_name as biome_name,
-        ref.legal_reserve_perc, 
-        ST_DISTANCE(p.centroid, ref.geometry) as dist
-    FROM properties p
-    INNER JOIN {{ ref('int_brazil_reference_geometries') }} ref
-        ON ref.restriction_type = 'BIOME'
-        -- AUMENTAMOS A TOLERÂNCIA PARA 50KM (50000 metros)
-        -- Isso garante que fazendas na costa, ilhas ou desenhadas no mar achem o bioma mais próximo
-        AND ST_DWITHIN(p.centroid, ref.geometry, 50000) 
-    QUALIFY ROW_NUMBER() OVER(PARTITION BY p.property_id ORDER BY dist ASC) = 1
+    UNION ALL
+    
+    SELECT 
+        property_id, total_area_ha, biome_name, total_rl_declared_ha, 
+        total_app_declared_ha, total_native_veg_ha, legal_reserve_perc, 
+        required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
+    FROM {{ ref('int_car_compliance_am') }}
 )
+
 SELECT 
-    p.property_id,
-    p.area_ha as total_area_ha,
-    b.biome_name,
-    
-    -- Dados Declarados
-    COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0) as total_rl_declared_ha,
-    COALESCE(t.app_declared_ha, 0) as total_app_declared_ha,
-    COALESCE(t.native_veg_ha, 0) as total_native_veg_ha,
-    
-    -- Regra de Compliance (Calculada)
-    b.legal_reserve_perc,
-    (p.area_ha * b.legal_reserve_perc) as required_rl_ha,
-    
-    -- Status de Compliance (Saldo)
-    ((COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0)) - (p.area_ha * b.legal_reserve_perc)) as rl_balance_ha,
-
-    -- NOVO: Coluna rl_deficit_ha adicionada explicitamente
-    -- Se o necessário for maior que o declarado, calcula a diferença. Senão, 0.
-    GREATEST(0, (p.area_ha * b.legal_reserve_perc) - (COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0))) as rl_deficit_ha,
-    
-    CASE 
-        -- 1. Se não encontrou bioma (ex: fora da área de cobertura), fica pendente de análise
-        WHEN b.biome_name IS NULL THEN 'PENDENTE'
-        
-        -- 2. Se o saldo for positivo além da margem de 100m², é Superávit
-        WHEN ((COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0)) - (p.area_ha * b.legal_reserve_perc)) > 0.1 THEN 'SURPLUS'
-        
-        -- 3. Se estiver dentro da margem (pelo menos -0.1), é Regular
-        WHEN ((COALESCE(t.rl_averbada_ha, 0) + COALESCE(t.rl_proposta_ha, 0)) - (p.area_ha * b.legal_reserve_perc)) >= -0.1 THEN 'REGULAR'
-        
-        -- 4. Caso contrário, é Déficit
-        ELSE 'DEFICIT'
-    END as rl_status
-
-FROM properties p
-LEFT JOIN themes_pivoted t ON p.property_id = t.property_id
-LEFT JOIN biome_match b ON p.property_id = b.property_id
+    property_id,
+    total_area_ha,
+    biome_name,
+    total_rl_declared_ha,
+    total_app_declared_ha,
+    total_native_veg_ha,
+    legal_reserve_perc,
+    required_rl_ha,
+    rl_balance_ha,
+    rl_deficit_ha,
+    rl_status,
+    ingested_at,
+    CURRENT_TIMESTAMP() as consolidated_at
+FROM unioned

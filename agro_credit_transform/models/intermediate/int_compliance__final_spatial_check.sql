@@ -8,14 +8,16 @@
 WITH car_geometries AS (
     SELECT
         property_id AS car_property_id,
-        geometry AS car_geometry
+        geometry_raw AS car_geometry,
+        geometry_simplified AS car_geometry_simplified,
+        ST_BOUNDINGBOX(geometry_simplified) as car_bbox
     FROM {{ ref('int_car_geometries') }}
-    WHERE geometry IS NOT NULL
+    WHERE geometry_raw IS NOT NULL
 ),
 
 dirty_sigef AS (
     SELECT
-        tax_id,
+        slave_labor_tax_id AS tax_id,
         employer_name,
         sigef_property_id,
         SAFE.ST_GEOGFROMTEXT(
@@ -25,7 +27,15 @@ dirty_sigef AS (
                 r'\1 \2'
             ),
             make_valid => TRUE
-        ) AS sigef_geometry
+        ) AS sigef_geometry,
+        ST_BOUNDINGBOX(SAFE.ST_GEOGFROMTEXT(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(sigef_geometry_wkt, r'(\b[A-Z]+)\s+Z\b', r'\1'),
+                r'([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?',
+                r'\1 \2'
+            ),
+            make_valid => TRUE
+        )) AS sigef_bbox
     FROM {{ ref('int_compliance__slave_labor_sigef_bridge') }}
     WHERE sigef_geometry_wkt IS NOT NULL
 ),
@@ -33,12 +43,14 @@ dirty_sigef AS (
 dirty_ibama AS (
     SELECT
         tax_id,
-        employer_name,
+        employer_name, 
         detail.is_active_embargo,
-        SAFE.ST_GEOGFROMTEXT(detail.geometry_wkt, make_valid => TRUE) AS ibama_geometry
+        -- 🟢 CORREÇÃO AQUI: A coluna já é geometry, não precisa de ST_GEOGFROMTEXT
+        detail.geometry AS ibama_geometry,
+        ST_BOUNDINGBOX(detail.geometry) AS ibama_bbox
     FROM {{ ref('int_compliance__identity_check') }},
     UNNEST(ibama_details) AS detail
-    WHERE detail.geometry_wkt IS NOT NULL
+    WHERE detail.geometry IS NOT NULL
 ),
 
 dirty_mapbiomas AS (
@@ -57,20 +69,14 @@ check_slave_labor AS (
         MAX(tax_id) AS tax_id,
         'SOCIAL_RISK_SLAVE_LABOR' AS risk_type,
         'OVERLAP WITH SIGEF AREA LINKED TO SLAVE LABOR' AS risk_description,
-        SUM(ST_AREA(intersection_geom) / 10000) AS overlap_ha
-    FROM (
-        SELECT
-            c.car_property_id,
-            s.employer_name,
-            s.tax_id,
-            ST_INTERSECTION(c.car_geometry, s.sigef_geometry) AS intersection_geom
-        FROM car_geometries c
-        INNER JOIN dirty_sigef s
-        ON ST_INTERSECTS(c.car_geometry, s.sigef_geometry)
-    )
-    WHERE intersection_geom IS NOT NULL
-      AND NOT ST_ISEMPTY(intersection_geom)
-      AND ST_AREA(intersection_geom) > 0.0001
+        SUM(ST_AREA(ST_INTERSECTION(c.car_geometry, s.sigef_geometry)) / 10000) AS overlap_ha
+    FROM car_geometries c
+    INNER JOIN dirty_sigef s
+    ON c.car_bbox.xmin <= s.sigef_bbox.xmax 
+       AND c.car_bbox.xmax >= s.sigef_bbox.xmin 
+       AND c.car_bbox.ymin <= s.sigef_bbox.ymax 
+       AND c.car_bbox.ymax >= s.sigef_bbox.ymin
+    WHERE ST_INTERSECTS(c.car_geometry_simplified, s.sigef_geometry)
     GROUP BY car_property_id
 ),
 
@@ -81,21 +87,15 @@ check_environmental AS (
         MAX(tax_id) AS tax_id,
         'ENVIRONMENTAL_RISK_EMBARGO' AS risk_type,
         'OVERLAP WITH IBAMA EMBARGO AREA' AS risk_description,
-        SUM(ST_AREA(intersection_geom) / 10000) AS overlap_ha
-    FROM (
-        SELECT
-            c.car_property_id,
-            i.employer_name,
-            i.tax_id,
-            ST_INTERSECTION(c.car_geometry, i.ibama_geometry) AS intersection_geom
-        FROM car_geometries c
-        INNER JOIN dirty_ibama i
-        ON ST_INTERSECTS(c.car_geometry, i.ibama_geometry)
-        WHERE i.is_active_embargo = TRUE
-    )
-    WHERE intersection_geom IS NOT NULL
-      AND NOT ST_ISEMPTY(intersection_geom)
-      AND ST_AREA(intersection_geom) > 0.0001
+        SUM(ST_AREA(ST_INTERSECTION(c.car_geometry, i.ibama_geometry)) / 10000) AS overlap_ha
+    FROM car_geometries c
+    INNER JOIN dirty_ibama i
+    ON c.car_bbox.xmin <= i.ibama_bbox.xmax 
+       AND c.car_bbox.xmax >= i.ibama_bbox.xmin 
+       AND c.car_bbox.ymin <= i.ibama_bbox.ymax 
+       AND c.car_bbox.ymax >= i.ibama_bbox.ymin
+    WHERE i.is_active_embargo = TRUE
+      AND ST_INTERSECTS(c.car_geometry_simplified, i.ibama_geometry)
     GROUP BY car_property_id
 ),
 
@@ -108,12 +108,19 @@ check_mapbiomas AS (
         CONCAT('CONFIRMED DEFORESTATION AFTER JULY 2008 (Latest Date: ', CAST(MAX(m.detection_date) AS STRING), ')') as risk_description,
         SUM(m.deforestation_overlap_ha) as overlap_ha
     FROM dirty_mapbiomas m
-    WHERE m.deforestation_overlap_ha > 0.0001
+    WHERE m.deforestation_overlap_ha > {{ var('gis_noise_ha_threshold', 0.01) }}
     GROUP BY m.car_code
+),
+
+final_unioned AS (
+    SELECT * FROM check_slave_labor
+    UNION ALL
+    SELECT * FROM check_environmental
+    UNION ALL
+    SELECT * FROM check_mapbiomas
 )
 
-SELECT * FROM check_slave_labor
-UNION ALL
-SELECT * FROM check_environmental
-UNION ALL
-SELECT * FROM check_mapbiomas
+SELECT 
+    * 
+FROM final_unioned
+WHERE overlap_ha > {{ var('gis_noise_ha_threshold', 0.01) }}

@@ -6,119 +6,109 @@
 
 WITH biomes AS (
     SELECT 
-        biome_code as restriction_id,
-        biome_name as restriction_name,
-        'BIOME' as restriction_type,
-        biome_name as restriction_subtype,
-        CASE 
-            WHEN biome_name = 'AMAZÔNIA' THEN 0.80
-            WHEN biome_name = 'CERRADO' THEN 0.35
-            ELSE 0.20
-        END as legal_reserve_perc,
-        FALSE as is_hard_block,
-        2 as priority_level,
-        file_hash,
-        source_filename,
-        ingested_at,
-        geometry_wkt
+        CONCAT('BIOME_', CAST(biome_code AS STRING)) as restriction_id, biome_name as restriction_name,
+        'BIOME' as restriction_type, biome_name as restriction_subtype,
+        CASE WHEN biome_name = 'AMAZÔNIA' THEN 0.80 WHEN biome_name = 'CERRADO' THEN 0.35 ELSE 0.20 END as legal_reserve_perc,
+        FALSE as is_hard_block, 2 as priority_level,
+        SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
+        file_hash, ingested_at
     FROM {{ ref('stg_ibge_biomes') }}
 ),
 
 indigenous AS (
     SELECT 
-        territory_code as restriction_id,
-        territory_name as restriction_name,
-        'INDIGENOUS_LAND' as restriction_type,
-        stage_name as restriction_subtype,
-        NULL as legal_reserve_perc,
-        TRUE as is_hard_block,
-        1 as priority_level,
-        file_hash,
-        source_filename,
-        ingested_at,
-        geometry_wkt
+        CONCAT('FUNAI_', CAST(territory_code AS STRING)) as restriction_id, territory_name as restriction_name,
+        'INDIGENOUS_LAND' as restriction_type, stage_name as restriction_subtype,
+        NULL as legal_reserve_perc, TRUE as is_hard_block, 1 as priority_level,
+        SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
+        file_hash, ingested_at
     FROM {{ ref('stg_funai_indigenous_lands') }}
+),
+
+app_rivers AS (
+    SELECT 
+        CONCAT('ANA_', CAST(basin_code AS STRING)) as restriction_id, CONCAT('APP RIO - ORDEM ', CAST(river_order AS STRING)) as restriction_name,
+        'APP_ZONE' as restriction_type, 'RIVER' as restriction_subtype,
+        NULL as legal_reserve_perc, TRUE as is_hard_block, 1 as priority_level,
+        SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
+        file_hash, ingested_at
+    FROM {{ ref('stg_ana_app_zones') }}
+),
+
+app_lakes AS (
+    SELECT 
+        CONCAT('IBGE_', CAST(water_body_id AS STRING)) as restriction_id, 'APP MASSA DAGUA' as restriction_name,
+        'APP_ZONE' as restriction_type, 'WATER_BODY' as restriction_subtype,
+        NULL as legal_reserve_perc, TRUE as is_hard_block, 1 as priority_level,
+        SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
+        file_hash, ingested_at
+    FROM {{ ref('stg_ibge_bc250_app_zones') }}
 ),
 
 quilombolas AS (
     SELECT 
-        territory_code as restriction_id,
-        community_name as restriction_name,
-        'QUILOMBOLA' as restriction_type,
-        status_name as restriction_subtype,
-        NULL as legal_reserve_perc,
-        TRUE as is_hard_block,
-        1 as priority_level,
-        file_hash,
-        source_filename,
-        ingested_at,
-        geometry_wkt
+        CONCAT('INCRA_Q_', CAST(quilombo_id AS STRING)) as restriction_id, quilombo_name as restriction_name,
+        'QUILOMBOLA' as restriction_type, certification_phase as restriction_subtype,
+        NULL as legal_reserve_perc, TRUE as is_hard_block, 1 as priority_level,
+        geometry,
+        file_hash, ingested_at
     FROM {{ ref('stg_incra_quilombola_lands') }}
 ),
 
--- NOVA FONTE: APPs de Rios (ANA)
-app_rivers AS (
+uc_icmbio AS (
     SELECT 
-        basin_code as restriction_id,
-        CONCAT('APP RIO - ORDEM ', CAST(river_order AS STRING)) as restriction_name,
-        'APP_ZONE' as restriction_type,
-        'RIVER' as restriction_subtype,
-        NULL as legal_reserve_perc,
-        TRUE as is_hard_block,
-        1 as priority_level,
-        file_hash,
-        'ANA_BHO_NIVEL_07' as source_filename,
-        ingested_at,
-        geometry_wkt
-    FROM {{ ref('stg_ana_app_zones') }}
+        CONCAT('ICMBIO_', CAST(uc_id AS STRING)) as restriction_id, uc_name as restriction_name,
+        'CONSERVATION_UNIT' as restriction_type, category as restriction_subtype,
+        NULL as legal_reserve_perc, TRUE as is_hard_block, 1 as priority_level,
+        geometry,
+        file_hash, ingested_at
+    FROM {{ ref('stg_icmbio__unidades_conservacao') }}
 ),
 
--- NOVA FONTE: APPs de Lagos/Represas (IBGE BC250)
-app_lakes AS (
+uc_sema AS (
     SELECT 
-        water_body_id as restriction_id,
-        'APP MASSA DAGUA' as restriction_name,
-        'APP_ZONE' as restriction_type,
-        'WATER_BODY' as restriction_subtype,
-        NULL as legal_reserve_perc,
-        TRUE as is_hard_block,
-        1 as priority_level,
-        file_hash,
-        'IBGE_BC250_2025' as source_filename,
-        ingested_at,
-        geometry_wkt
-    FROM {{ ref('stg_ibge_bc250_app_zones') }}
+        CONCAT('SEMA_', CAST(uc_id AS STRING)) as restriction_id, uc_name as restriction_name,
+        'CONSERVATION_UNIT' as restriction_type, category as restriction_subtype,
+        NULL as legal_reserve_perc, TRUE as is_hard_block, 1 as priority_level,
+        geometry,
+        file_hash, ingested_at
+    FROM {{ ref('stg_sema_mt__unidades_conservacao') }}
+),
+
+assentamentos_incra AS (
+    SELECT 
+        CONCAT('INCRA_A_', CAST(settlement_id AS STRING)) as restriction_id, settlement_name as restriction_name,
+        'SETTLEMENT' as restriction_type, phase as restriction_subtype,
+        NULL as legal_reserve_perc, TRUE as is_hard_block, 1 as priority_level,
+        geometry,
+        file_hash, ingested_at
+    FROM {{ ref('stg_incra__assentamentos') }}
+),
+
+assentamentos_intermat AS (
+    SELECT 
+        CONCAT('INTERMAT_', CAST(settlement_id AS STRING)) as restriction_id, settlement_name as restriction_name,
+        'SETTLEMENT' as restriction_type, phase as restriction_subtype,
+        NULL as legal_reserve_perc, TRUE as is_hard_block, 1 as priority_level,
+        geometry,
+        file_hash, ingested_at
+    FROM {{ ref('stg_intermat__assentamentos') }}
 ),
 
 unioned AS (
-    SELECT * FROM biomes
-    UNION ALL
-    SELECT * FROM indigenous
-    UNION ALL
-    SELECT * FROM quilombolas
-    UNION ALL
-    SELECT * FROM app_rivers
-    UNION ALL
-    SELECT * FROM app_lakes
-),
-
-spatial_processing AS (
-    SELECT
-        * EXCEPT(geometry_wkt),
-        -- Converte o WKT para GEOGRAPHY. 
-        -- O DuckDB já simplificou, então aqui o processamento será rápido.
-        SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry_raw
-    FROM unioned
-),
-
-final_enriched AS (
-    SELECT
-        * EXCEPT(geometry_raw),
-        -- Mantemos a geometria e calculamos a BBox para o matching de alta performance
-        geometry_raw as geometry,
-        ST_BOUNDINGBOX(geometry_raw) as bbox
-    FROM spatial_processing
-    WHERE geometry_raw IS NOT NULL
+    SELECT * FROM biomes UNION ALL
+    SELECT * FROM indigenous UNION ALL
+    SELECT * FROM app_rivers UNION ALL
+    SELECT * FROM app_lakes UNION ALL
+    SELECT * FROM quilombolas UNION ALL
+    SELECT * FROM uc_icmbio UNION ALL
+    SELECT * FROM uc_sema UNION ALL
+    SELECT * FROM assentamentos_incra UNION ALL
+    SELECT * FROM assentamentos_intermat
 )
 
-SELECT * FROM final_enriched
+SELECT
+    *,
+    ST_BOUNDINGBOX(geometry) as bbox
+FROM unioned
+WHERE geometry IS NOT NULL

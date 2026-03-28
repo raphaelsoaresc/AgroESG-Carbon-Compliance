@@ -11,25 +11,37 @@ WITH source_data AS (
 renamed_and_filtered AS (
     SELECT
         -- Identificadores
-        CAST(alertid AS INT64) as alert_id,
-        CAST(alertcode AS INT64) as alert_code,
+        CAST(ALERTID AS INT64) as alert_id,
+        CAST(ALERTCODE AS INT64) as alert_code,
         
-        -- Datas
-        COALESCE(
-            SAFE.PARSE_DATE('%Y-%m-%d', LEFT(CAST(detectat AS STRING), 10)),
-            SAFE.PARSE_DATE('%d-%m-%Y', LEFT(CAST(detectat AS STRING), 10)),
-            SAFE.PARSE_DATE('%d/%m/%Y', LEFT(CAST(detectat AS STRING), 10))
-        ) as detection_date,
+        -- Datas (Originais)
+        -- Nota: Como no seu schema DETECTAT já é DATE, o SAFE_CAST garante compatibilidade
+        SAFE_CAST(DETECTAT AS DATE) as detection_date,
+        CAST(DETECTYEAR AS INT64) as detection_year,
+
+        -- Datas de Imagem (Corrigido para BEFOR... conforme schema)
+        SAFE_CAST(BEFORIMGDT AS DATE) as image_date_before,
+        SAFE_CAST(AFTERIMGDT AS DATE) as image_date_after,
         
-        CAST(detectyear AS INT64) as detection_year,
+        -- Métricas (Originais)
+        SAFE_CAST(ALERTHA AS FLOAT64) as alert_area_ha,
+        SOURCE as source_satellite,
+        BIOME as biome,
+
+        -- Métricas de Sobreposição e Áreas (Novas Colunas)
+        ALERTHA as total_alert_ha,
+        INLANDHA as overlap_indigenous_ha,
+        QUILHA as overlap_quilombola_ha,
+        SETTLHA as overlap_settlement_ha,
+
+        -- Classificação e Fontes (Novas Colunas)
+        SOURCE as alert_source,
+        ALERTCLASS as land_use_class,
+
+        -- Link dinâmico para o laudo oficial (Nova Coluna)
+        'https://plataforma.alerta.mapbiomas.org/alerta/' || CAST(ALERTID AS STRING) as mapbiomas_url,
         
-        -- Métricas
-        SAFE_CAST(alertha AS FLOAT64) as alert_area_ha,
-        source as source_satellite,
-        biome as biome,
-        
-        -- Geometria (A CORREÇÃO MÁGICA ESTÁ AQUI)
-        -- make_valid => TRUE conserta laços e buracos inválidos
+        -- Geometria
         ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
         
         -- Auditoria
@@ -53,4 +65,4 @@ SELECT * EXCEPT(row_num)
 FROM deduplicated
 WHERE row_num = 1
   AND detection_date IS NOT NULL
-  AND geometry IS NOT NULL -- Remove geometrias que não puderam ser consertadas
+  AND geometry IS NOT NULL

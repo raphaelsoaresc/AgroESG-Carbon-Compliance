@@ -5,69 +5,64 @@
     tags=['compliance', 'legal', 'cmn_5081', 'eudr']
 ) }}
 
-{% set forest_code_date = var('forest_code_threshold_date', '2008-07-22') %}
-{% set gis_noise_ha = var('gis_noise_ha_threshold', 0.1) %}
-{% set fine_defo = var('fine_deforestation_per_ha', 5000) %}
-{% set fine_protected = var('fine_protected_area_per_ha', 10000) %}
-{% set fine_slave = var('fine_slave_labor_fixed', 500000) %}
-{% set fine_app = var('fine_app_violation_fixed', 50000) %}
-{% set fine_rl = var('fine_rl_deficit_per_ha', 5000) %}
+WITH legal_params AS (
+    SELECT
+        MAX(CASE WHEN parameter_name = 'fine_deforestation_per_ha' THEN CAST(value AS FLOAT64) END) as fine_defo,
+        MAX(CASE WHEN parameter_name = 'fine_protected_area_per_ha' THEN CAST(value AS FLOAT64) END) as fine_protected,
+        MAX(CASE WHEN parameter_name = 'fine_slave_labor_fixed' THEN CAST(value AS FLOAT64) END) as fine_slave,
+        MAX(CASE WHEN parameter_name = 'fine_app_violation_fixed' THEN CAST(value AS FLOAT64) END) as fine_app,
+        MAX(CASE WHEN parameter_name = 'fine_rl_deficit_per_ha' THEN CAST(value AS FLOAT64) END) as fine_rl,
+        MAX(CASE WHEN parameter_name = 'gis_noise_ha_threshold' THEN CAST(value AS FLOAT64) END) as noise_threshold,
+        MAX(CASE WHEN parameter_name = 'eudr_cutoff_date' THEN CAST(value AS DATE) END) as eudr_date,
+        MAX(CASE WHEN parameter_name = 'forest_code_cutoff_date' THEN CAST(value AS DATE) END) as forest_code_date
+    FROM {{ ref('legal_parameters') }}
+),
 
-WITH properties AS (
+properties AS (
     SELECT
         UPPER(TRIM(p_meta.property_id)) as property_id,
-        -- CORREÇÃO: Pega a área da geometria, se não tiver, pega a declarada na stg para passar no teste area_ha > 0
         COALESCE(g.area_ha, p_meta.area_ha, 0) as area_ha,
         p_meta.city,
-        p_meta.uf_origem,
+        UPPER(TRIM(p_meta.uf_origem)) as uf_origem,
         COALESCE(TRIM(o.registration_status), 'ATIVO') as registration_status,
-        o.registration_date as car_registration_date,
-        o.last_update_date as car_last_update_date,
-        o.rectification_date as car_rectification_date,
-        g.geometry, 
+        g.geometry_raw as geometry,
         g.centroid,
-        CASE WHEN g.geometry IS NULL THEN TRUE ELSE FALSE END as is_missing_geometry
+        g.car_bbox,
+        CASE WHEN g.geometry_raw IS NULL THEN TRUE ELSE FALSE END as is_missing_geometry
     FROM {{ ref('stg_car_properties') }} p_meta
     LEFT JOIN {{ ref('int_car_geometries') }} g ON UPPER(TRIM(p_meta.property_id)) = UPPER(TRIM(g.property_id))
     LEFT JOIN {{ ref('stg_car_owners') }} o ON UPPER(TRIM(p_meta.property_id)) = UPPER(TRIM(o.property_id))
 ),
 
-car_self_overlap AS (
-    SELECT property_id, total_overlapping_cars, total_overlap_ha, overlap_pct
-    FROM {{ ref('int_car_self_overlap') }}
-),
-
-sicar_native_overlaps AS (
+forensic_areas AS (
     SELECT
         UPPER(TRIM(property_id)) as property_id,
-        LOGICAL_OR(overlap_source IN ('FUNAI', 'TI', 'TERRA_INDIGENA')) as sicar_flag_ti,
-        LOGICAL_OR(overlap_source IN ('INCRA', 'QUILOMBOLA')) as sicar_flag_quilombola,
-        LOGICAL_OR(overlap_source IN ('ICMBIO', 'ESTADUAL', 'UC', 'UNIDADE_CONSERVACAO')) as sicar_flag_uc,
-        MAX(CASE WHEN overlap_source IN ('FUNAI', 'TI', 'TERRA_INDIGENA', 'INCRA', 'QUILOMBOLA', 'ICMBIO', 'ESTADUAL', 'UC', 'UNIDADE_CONSERVACAO') THEN overlap_area_ha ELSE 0 END) as sicar_total_overlap_ha
-    FROM {{ ref('stg_car_overlaps') }}
+        SUM(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_MAPBIOMAS' THEN target_area_ha ELSE 0 END) as forensic_defo_ha,
+        SUM(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_EM_APP' THEN target_area_ha ELSE 0 END) as app_deforested_ha_forensic,
+        SUM(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_EM_APP_HIDRICA' THEN target_area_ha ELSE 0 END) as forensic_app_hidrica_ha,
+        SUM(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_EM_APP_DECLIVIDADE' THEN target_area_ha ELSE 0 END) as forensic_app_declividade_ha,
+        SUM(CASE WHEN target_type = 'RECORTE_EMBARGO' THEN target_area_ha ELSE 0 END) as forensic_embargo_ha,
+        SUM(CASE WHEN target_type = 'RECORTE_INVASAO_TI' THEN target_area_ha ELSE 0 END) as forensic_ti_ha,
+        SUM(CASE WHEN target_type = 'RECORTE_INVASAO_QUILOMBO' THEN target_area_ha ELSE 0 END) as forensic_quilombo_ha,
+        SUM(CASE WHEN target_type = 'RECORTE_INVASAO_UC' THEN target_area_ha ELSE 0 END) as forensic_uc_ha,
+        -- Mapeamento solicitado: Assentamentos e Territórios Tradicionais
+        SUM(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN target_area_ha ELSE 0 END) as forensic_settlement_ha,
+        SUM(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN target_area_ha ELSE 0 END) as forensic_traditional_ha,
+        MAX(data_source_quality) as data_source_quality
+    FROM {{ ref('int_compliance_forensic_shapes') }}
     GROUP BY 1
-),
-
-spatial_restrictions AS (
-    SELECT
-        UPPER(TRIM(property_id)) as property_id,
-        EXISTS(SELECT 1 FROM UNNEST(overlaps_details) x WHERE x.restriction_type = 'INDIGENOUS_LAND') as gis_flag_ti,
-        EXISTS(SELECT 1 FROM UNNEST(overlaps_details) x WHERE x.restriction_type = 'QUILOMBOLA') as gis_flag_quilombola,
-        EXISTS(SELECT 1 FROM UNNEST(overlaps_details) x WHERE x.restriction_type = 'CONSERVATION_UNIT') as gis_flag_uc,
-        total_overlap_ha as gis_total_overlap_ha
-    FROM {{ ref('int_car_spatial_restrictions') }}
 ),
 
 slave_labor_combined AS (
     SELECT
         s.property_id,
-        MAX(s.match_confidence) as match_confidence,
+        MAX(s.territorial_match_confidence) as match_confidence,
         ARRAY_AGG(DISTINCT s.employer_name IGNORE NULLS) as employers,
         MAX(mte.inclusion_date) as slave_labor_inclusion_date
     FROM (
-        SELECT UPPER(TRIM(sigef_property_id)) as property_id, territorial_match_confidence as match_confidence, employer_name FROM {{ ref('int_compliance__slave_labor_sigef_bridge') }} WHERE territorial_match_confidence IN ('HIGH', 'MEDIUM')
+        SELECT UPPER(TRIM(sigef_property_id)) as property_id, territorial_match_confidence, employer_name FROM {{ ref('int_compliance__slave_labor_sigef_bridge') }}
         UNION ALL
-        SELECT UPPER(TRIM(car_property_id)) as property_id, 'HIGH' as match_confidence, employer_name FROM {{ ref('int_compliance__final_spatial_check') }} WHERE risk_type = 'SOCIAL_RISK_SLAVE_LABOR'
+        SELECT UPPER(TRIM(car_property_id)) as property_id, 'HIGH' as territorial_match_confidence, employer_name FROM {{ ref('int_compliance__final_spatial_check') }} WHERE risk_type = 'SOCIAL_RISK_SLAVE_LABOR'
     ) s
     LEFT JOIN {{ ref('stg_mte_slave_labor') }} mte ON UPPER(TRIM(s.employer_name)) = UPPER(TRIM(mte.employer_name))
     GROUP BY 1
@@ -75,223 +70,275 @@ slave_labor_combined AS (
 
 embargo_check AS (
     SELECT
-        UPPER(TRIM(p.property_id)) as property_id,
-        COALESCE(MIN(i.embargo_date), CAST('1900-01-01' AS DATE)) as earliest_embargo_date,
-        SUM(ST_AREA(ST_INTERSECTION(p.geometry, i.geometry)) / 10000) as embargo_area_ha
-    FROM properties p
-    INNER JOIN {{ ref('int_ibama_geometries') }} i ON ST_INTERSECTS(p.geometry, i.geometry)
-    WHERE p.geometry IS NOT NULL
-    GROUP BY 1
+        UPPER(TRIM(property_id)) as property_id,
+        earliest_embargo_date,
+        has_any_active_embargo,
+        has_any_cancelled_embargo,
+        embargo_offenders,
+        embargo_processes,
+        embargo_tax_ids,
+        embargo_reported_areas,
+        embargo_sources
+    FROM {{ ref('int_property_embargo_overlap') }}
 ),
 
 mapbiomas_check AS (
     SELECT
         UPPER(TRIM(car_code)) as property_id,
         MAX(detection_date) as latest_deforestation_date,
-        SUM(deforestation_overlap_ha) as total_deforested_ha,
-        SUM(CASE WHEN detection_date > '2020-12-31' THEN deforestation_overlap_ha ELSE 0 END) as eudr_deforested_ha,
-        ARRAY_AGG(alert_id ORDER BY detection_date DESC LIMIT 1)[OFFSET(0)] as latest_alert_id
+        MIN(image_date_before) as earliest_evidence_date,
+        MAX(image_date_after) as latest_evidence_date,
+        ARRAY_TO_STRING(ARRAY_AGG(DISTINCT land_use_class IGNORE NULLS), ' | ') as mapbiomas_classes,
+        ARRAY_TO_STRING(ARRAY_AGG(DISTINCT mapbiomas_url IGNORE NULLS), ' | ') as mapbiomas_report_links
     FROM {{ ref('int_mapbiomas_deforestation') }}
     GROUP BY 1
-),
-
-satellite_data AS (
-    SELECT UPPER(TRIM(property_id)) as property_id, * EXCEPT(property_id) FROM {{ ref('int_satellite_metrics_union') }}
 ),
 
 full_context AS (
     SELECT
         p.*,
-        COALESCE(sn.sicar_flag_ti OR sr.gis_flag_ti, FALSE) as is_ti_overlap,
-        COALESCE(sn.sicar_flag_quilombola OR sr.gis_flag_quilombola, FALSE) as is_quilombola_overlap,
-        COALESCE(sn.sicar_flag_uc OR sr.gis_flag_uc, FALSE) as is_uc_overlap,
-        LEAST(GREATEST(COALESCE(sn.sicar_total_overlap_ha, 0), COALESCE(sr.gis_total_overlap_ha, 0)), p.area_ha) as total_protected_overlap_ha,
-        COALESCE(sl.match_confidence, 'NONE') as slave_labor_match,
-        sl.employers as slave_labor_employers,
-        sl.slave_labor_inclusion_date,
-        LEAST(COALESCE(e.embargo_area_ha, 0), p.area_ha) as embargo_area_ha,
+        lp.*,
+        sat.max_slope_degrees,
+        sat.relief_classification,
+        sat.last_update,
+        COALESCE(f.forensic_embargo_ha, 0) as embargo_area_ha,
         e.earliest_embargo_date as embargo_date,
-        LEAST(COALESCE(mb.total_deforested_ha, 0), p.area_ha) as mapbiomas_deforested_ha,
-        LEAST(COALESCE(mb.eudr_deforested_ha, 0), p.area_ha) as eudr_deforested_ha,
+        COALESCE(e.has_any_active_embargo, FALSE) as has_any_active_embargo,
+        COALESCE(e.has_any_cancelled_embargo, FALSE) as has_any_cancelled_embargo,
+        e.embargo_offenders, e.embargo_processes, e.embargo_tax_ids, e.embargo_reported_areas, e.embargo_sources,
+        
+        COALESCE(f.forensic_defo_ha, 0) as mapbiomas_deforested_ha,
+        COALESCE(f.app_deforested_ha_forensic, 0) as app_deforested_ha_forensic,
+        f.forensic_app_hidrica_ha,
+        f.forensic_app_declividade_ha,
+        
         mb.latest_deforestation_date as mapbiomas_date,
-        mb.latest_alert_id as mapbiomas_alert_id,
-        sat.max_slope_degrees, sat.general_ndvi_mean, sat.app_ndvi_mean,
-        sat.is_app_violation_risk, sat.alert_selective_deforestation_in_app,
-        sat.app_vegetation_status, sat.general_vegetation_state,
-        sat.last_satellite_update,
-        -- CORREÇÃO: Valor padrão para bioma para passar no teste NOT NULL
+        mb.earliest_evidence_date, mb.latest_evidence_date,
+        mb.mapbiomas_classes, mb.mapbiomas_report_links,
+        
+        CASE WHEN mb.latest_deforestation_date >= lp.eudr_date THEN COALESCE(f.forensic_defo_ha, 0) ELSE 0 END as eudr_deforested_ha,
+        
+        sl.match_confidence as slave_labor_match_confidence,
+        sl.slave_labor_inclusion_date,
         COALESCE(c.biome_name, 'N/A') as biome_name, 
-        c.rl_status,
-        c.rl_deficit_ha,
-        c.rl_balance_ha,
+        c.rl_status, c.rl_deficit_ha, c.rl_balance_ha,
+        
+        (COALESCE(f.forensic_ti_ha, 0) + COALESCE(f.forensic_uc_ha, 0) + COALESCE(f.forensic_quilombo_ha, 0) + COALESCE(f.forensic_settlement_ha, 0) + COALESCE(f.forensic_traditional_ha, 0)) as protected_area_overlap_ha,
+        CASE WHEN (COALESCE(f.forensic_ti_ha,0) + COALESCE(f.forensic_uc_ha,0) + COALESCE(f.forensic_quilombo_ha,0) + COALESCE(f.forensic_settlement_ha, 0) + COALESCE(f.forensic_traditional_ha, 0)) > 0 THEN TRUE ELSE FALSE END as is_protected_area_overlap,
+        f.forensic_ti_ha, f.forensic_quilombo_ha, f.forensic_uc_ha, f.forensic_settlement_ha, f.forensic_traditional_ha, f.data_source_quality,
+        
         COALESCE(so.overlap_pct, 0) as car_on_car_overlap_pct,
         COALESCE(so.total_overlapping_cars, 0) as total_overlapping_cars
     FROM properties p
-    LEFT JOIN sicar_native_overlaps sn ON p.property_id = sn.property_id
-    LEFT JOIN spatial_restrictions sr ON p.property_id = sr.property_id
-    LEFT JOIN slave_labor_combined sl ON p.property_id = sl.property_id
+    CROSS JOIN legal_params lp
+    LEFT JOIN forensic_areas f ON p.property_id = f.property_id
+    LEFT JOIN {{ ref('int_satellite_metrics_persistent') }} sat ON p.property_id = sat.property_id
     LEFT JOIN embargo_check e ON p.property_id = e.property_id
     LEFT JOIN mapbiomas_check mb ON p.property_id = mb.property_id 
-    LEFT JOIN satellite_data sat ON p.property_id = sat.property_id
+    LEFT JOIN slave_labor_combined sl ON p.property_id = sl.property_id
     LEFT JOIN {{ ref('int_car_compliance_metrics') }} c ON p.property_id = c.property_id
-    LEFT JOIN car_self_overlap so ON p.property_id = so.property_id
+    LEFT JOIN {{ ref('int_car_self_overlap') }} so ON p.property_id = so.property_id
 ),
 
 final_analysis AS (
     SELECT
         *,
-        ARRAY_TO_STRING(ARRAY(
-            SELECT x FROM UNNEST([
-                CASE WHEN is_missing_geometry THEN 'INVALID_GEOMETRY' END,
-                CASE WHEN slave_labor_match != 'NONE' THEN 'SOCIAL' END,
-                CASE WHEN is_ti_overlap OR is_quilombola_overlap THEN 'TRADITIONAL_TERRITORY' END,
-                CASE WHEN registration_status IN ('CANCELADO', 'SUSPENSO') THEN 'CAR_STATUS' END,
-                CASE WHEN (biome_name LIKE 'AMAZ%NIA' AND embargo_area_ha > 0) THEN 'CMN_5081' END,
-                CASE WHEN (embargo_area_ha > {{ gis_noise_ha }} AND embargo_date >= '{{ forest_code_date }}') THEN 'IBAMA' END,
-                CASE WHEN eudr_deforested_ha > {{ gis_noise_ha }} THEN 'EUDR' END,
-                CASE WHEN mapbiomas_deforested_ha > {{ gis_noise_ha }} THEN 'MAPBIOMAS' END,
-                CASE WHEN car_on_car_overlap_pct > 0.1 THEN 'CAR_OVERLAP' END,
-                CASE WHEN (embargo_area_ha > {{ gis_noise_ha }} AND (embargo_date < '{{ forest_code_date }}' OR embargo_date IS NULL)) THEN 'OLD_EMBARGO' END,
-                CASE WHEN is_uc_overlap AND total_protected_overlap_ha > {{ gis_noise_ha }} THEN 'CONSERVATION_UNIT' END,
-                CASE WHEN is_app_violation_risk OR alert_selective_deforestation_in_app OR max_slope_degrees > 48 THEN 'SATELLITE' END,
-                CASE WHEN max_slope_degrees > 45 AND max_slope_degrees <= 48 THEN 'BORDERLINE_SLOPE' END,
-                CASE WHEN app_vegetation_status = 'CLOUD_COVERED' THEN 'CLOUD_COVER' END,
-                CASE WHEN rl_status = 'DEFICIT' THEN 'RL_DEFICIT' END
-            ]) AS x WHERE x IS NOT NULL
-        ), ' | ') as internal_risks_found,
+        LEAST(protected_area_overlap_ha, area_ha) as protected_area_fixed_ha,
+        LEAST(mapbiomas_deforested_ha, area_ha) as defo_fixed_ha,
+        LEAST(embargo_area_ha, area_ha) as embargo_fixed_ha,
 
-        ARRAY_TO_STRING(ARRAY(
-            SELECT x FROM UNNEST([
-                CASE WHEN is_missing_geometry THEN 'Geometria não encontrada na base cartográfica' END,
-                CASE WHEN slave_labor_match != 'NONE' THEN FORMAT('Trabalho Escravo (Inclusão: %t)', slave_labor_inclusion_date) END,
-                CASE WHEN (embargo_area_ha > {{ gis_noise_ha }} AND embargo_date >= '{{ forest_code_date }}') THEN FORMAT('Embargo IBAMA (Bloqueio): %.2f ha', embargo_area_ha) END,
-                CASE WHEN eudr_deforested_ha > {{ gis_noise_ha }} THEN FORMAT('Violação EUDR (Pós-2020): %.2f ha', eudr_deforested_ha) END,
-                CASE WHEN mapbiomas_deforested_ha > {{ gis_noise_ha }} THEN FORMAT('Desmatamento MapBiomas (Alerta %d): %.2f ha em %t', mapbiomas_alert_id, mapbiomas_deforested_ha, mapbiomas_date) END,
-                CASE WHEN car_on_car_overlap_pct > 0.1 THEN FORMAT('Sobreposição entre CARs: %.1f%% com %d vizinhos', car_on_car_overlap_pct * 100, total_overlapping_cars) END,
-                CASE WHEN (embargo_area_ha > {{ gis_noise_ha }} AND (embargo_date < '{{ forest_code_date }}' OR embargo_date IS NULL)) THEN FORMAT('Embargo Histórico (Aviso): %.2f ha', embargo_area_ha) END,
-                CASE WHEN total_protected_overlap_ha > {{ gis_noise_ha }} THEN 'Sobreposição em Área Protegida' END,
-                CASE WHEN app_vegetation_status = 'CLOUD_COVERED' THEN FORMAT('Análise de satélite obstruída por nuvens em %t', last_satellite_update) END,
-                CASE WHEN rl_status = 'DEFICIT' THEN FORMAT('Déficit de RL: %.2f ha', rl_deficit_ha) END,
-                CASE WHEN max_slope_degrees > 45 AND max_slope_degrees <= 48 THEN FORMAT('Alerta de Declividade: %.2f°', max_slope_degrees) END
-            ]) AS x WHERE x IS NOT NULL
-        ), ' | ') as detailed_evidence_string,
-
-        ARRAY_TO_STRING(ARRAY(
-            SELECT x FROM UNNEST([
-                FORMAT('Declividade: %.1f°', max_slope_degrees),
-                FORMAT('NDVI: %.2f', general_ndvi_mean),
-                FORMAT('Bioma: %s', biome_name)
-            ]) AS x
-        ), ' | ') as compliance_metrics_string
+        -- IS_TECHNICALLY_BLOCKED: Atualizado para incluir EUDR, Geometria e Assentamentos (Garante Adjacência correta)
+        (
+            (slave_labor_match_confidence = 'HIGH') OR 
+            (registration_status IN ('CANCELADO', 'SUSPENSO')) OR 
+            (is_missing_geometry = TRUE) OR
+            (forensic_ti_ha > 0.001 OR forensic_quilombo_ha > 0.001 OR forensic_uc_ha > 0.001 OR forensic_settlement_ha > 0.001 OR forensic_traditional_ha > 0.001) OR 
+            (mapbiomas_deforested_ha > noise_threshold AND mapbiomas_date >= forest_code_date) OR 
+            (embargo_area_ha > 0.1 AND (embargo_date >= forest_code_date OR embargo_date IS NULL)) OR 
+            (biome_name LIKE 'AMAZ%NIA' AND embargo_area_ha >= 0.001 AND (embargo_date >= forest_code_date OR embargo_date IS NULL)) OR
+            (app_deforested_ha_forensic > 0.001) OR 
+            (eudr_deforested_ha > 0) OR
+            (max_slope_degrees > 45) OR
+            (EXISTS(SELECT 1 FROM UNNEST(embargo_sources) s WHERE s IN ('IBAMA', 'SEMA_MT', 'SIGA_MT', 'ICMBIO')))
+        ) as is_technically_blocked
     FROM full_context
 ),
 
 contamination_risk AS (
     SELECT
         f1.property_id,
-        ARRAY_TO_STRING(ARRAY_AGG(DISTINCT f2.internal_risks_found), ' e ') as neighbor_statuses
+        ARRAY_TO_STRING(ARRAY_AGG(DISTINCT
+            CASE
+                WHEN f2.slave_labor_match_confidence IS NOT NULL THEN 'SOCIAL'
+                WHEN f2.embargo_area_ha > 0.1 THEN 'EMBARGO'
+                WHEN f2.mapbiomas_deforested_ha > 0.1 THEN 'DESMATAMENTO'
+                ELSE 'OUTROS'
+            END
+        ), ' | ') as neighbor_risks
     FROM final_analysis f1
-    INNER JOIN final_analysis f2 ON ST_INTERSECTS(f1.geometry, f2.geometry)
+    INNER JOIN final_analysis f2
+        ON f1.car_bbox.xmin <= f2.car_bbox.xmax
+        AND f1.car_bbox.xmax >= f2.car_bbox.xmin
+        AND f1.car_bbox.ymin <= f2.car_bbox.ymax
+        AND f1.car_bbox.ymax >= f2.car_bbox.ymin
     WHERE f1.property_id != f2.property_id
-      AND f1.geometry IS NOT NULL AND f2.geometry IS NOT NULL
-      AND (
-          f2.internal_risks_found LIKE '%SOCIAL%'
-          OR f2.internal_risks_found LIKE '%TRADITIONAL_TERRITORY%'
-          OR f2.internal_risks_found LIKE '%CAR_STATUS%'
-          OR f2.internal_risks_found LIKE '%CMN_5081%'
-          OR f2.internal_risks_found LIKE '%IBAMA%'
-          OR f2.internal_risks_found LIKE '%EUDR%'
-          OR f2.internal_risks_found LIKE '%MAPBIOMAS%'
-          OR f2.internal_risks_found LIKE '%CONSERVATION_UNIT%'
-          OR f2.internal_risks_found LIKE '%SATELLITE%'
-      )
+    AND f2.is_technically_blocked = TRUE
+    AND ST_INTERSECTS(f1.geometry, f2.geometry)
+    AND ST_AREA(ST_INTERSECTION(f1.geometry, f2.geometry)) > 1
     GROUP BY 1
+),
+
+final_status_calc AS (
+    SELECT
+        v.*,
+        c.neighbor_risks as adjacency_details,
+        CASE
+            -- GRUPO 1: BLOQUEIOS CRÍTICOS (NOT ELIGIBLE)
+            WHEN v.slave_labor_match_confidence = 'HIGH' THEN 'NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)'
+            WHEN v.registration_status IN ('CANCELADO', 'SUSPENSO') THEN 'NOT ELIGIBLE - CAR STATUS'
+            WHEN v.is_missing_geometry = TRUE THEN 'NOT ELIGIBLE - INVALID GEOMETRY'
+            WHEN v.forensic_ti_ha > 0 THEN 'NOT ELIGIBLE - INDIGENOUS LAND'
+            WHEN v.forensic_quilombo_ha > 0 THEN 'NOT ELIGIBLE - QUILOMBOLA'
+            WHEN v.forensic_uc_ha > 0 THEN 'NOT ELIGIBLE - CONSERVATION UNIT'
+            WHEN v.forensic_settlement_ha > 0 THEN 'NOT ELIGIBLE - SETTLEMENT'
+            WHEN v.forensic_traditional_ha > 0 THEN 'NOT ELIGIBLE - TRADITIONAL TERRITORY'
+            WHEN v.forensic_app_hidrica_ha > 0 THEN 'NOT ELIGIBLE - APP DEFORESTATION (WATER)'
+            WHEN v.forensic_app_declividade_ha > 0 THEN 'NOT ELIGIBLE - APP DEFORESTATION (SLOPE)'
+            WHEN v.app_deforested_ha_forensic > 0 THEN 'NOT ELIGIBLE - APP DEFORESTATION'
+            WHEN v.eudr_deforested_ha > 0 THEN 'NOT ELIGIBLE - EUDR VIOLATION (POST-2020)'
+            WHEN v.mapbiomas_deforested_ha > v.noise_threshold AND v.mapbiomas_date >= v.forest_code_date THEN 'NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)'
+            WHEN v.biome_name LIKE 'AMAZ%NIA' AND v.embargo_area_ha >= 0.001 AND (v.embargo_date >= v.forest_code_date OR v.embargo_date IS NULL) THEN 'NOT ELIGIBLE - IBAMA AMAZON (CMN 5.081)'
+            WHEN EXISTS(SELECT 1 FROM UNNEST(v.embargo_sources) s WHERE s = 'IBAMA') THEN 'NOT ELIGIBLE - IBAMA'
+            WHEN EXISTS(SELECT 1 FROM UNNEST(v.embargo_sources) s WHERE s = 'SEMA_MT') THEN 'NOT ELIGIBLE - SEMA_MT'
+            WHEN EXISTS(SELECT 1 FROM UNNEST(v.embargo_sources) s WHERE s = 'SIGA_MT') THEN 'NOT ELIGIBLE - SIGA_MT'
+            WHEN EXISTS(SELECT 1 FROM UNNEST(v.embargo_sources) s WHERE s = 'ICMBIO') THEN 'NOT ELIGIBLE - ICMBIO'
+            WHEN v.embargo_area_ha > 0.1 AND (v.embargo_date >= v.forest_code_date OR v.embargo_date IS NULL) THEN 'NOT ELIGIBLE - EMBARGO'
+            WHEN v.max_slope_degrees > 45 THEN 'NOT ELIGIBLE - SATELLITE (SLOPE)'
+
+            -- FILTRO DE ESCOPO (Restaurando os 39% de propriedades não-ativas)
+            WHEN v.registration_status NOT IN ('ATIVO', 'PENDENTE') THEN 'MANUAL_REVIEW_REQUIRED - OUT OF SCOPE'
+
+            -- GRUPO 2: ALERTAS (WARNINGS & CONDITIONAL)
+            WHEN c.neighbor_risks IS NOT NULL AND c.neighbor_risks != '' THEN 'WARNING - RISK BY ADJACENCY'
+            WHEN v.slave_labor_match_confidence IS NOT NULL AND v.slave_labor_match_confidence != 'HIGH' THEN 'AWAITING_MANUAL_VALIDATION - POTENTIAL SOCIAL RISK'
+            WHEN v.has_any_cancelled_embargo = TRUE THEN 'WARNING - EMBARGO CANCELLED/JUDICIAL'
+            WHEN v.embargo_area_ha > 0.1 AND v.embargo_date >= v.forest_code_date AND v.has_any_active_embargo = FALSE THEN 'WARNING - OLD EMBARGO'
+            WHEN v.mapbiomas_deforested_ha > v.noise_threshold AND v.mapbiomas_date < v.forest_code_date THEN 'WARNING - OLD EMBARGO (PRE-2008)'
+            WHEN v.car_on_car_overlap_pct > 10 THEN 'WARNING - HIGH CAR OVERLAP'
+            WHEN v.max_slope_degrees BETWEEN 40 AND 45 THEN 'WARNING - BORDERLINE SLOPE'
+            WHEN v.rl_deficit_ha > 0.01 THEN 'CONDITIONAL - RL DEFICIT'
+            
+            -- ELEGÍVEL (Default para ATIVO sem riscos)
+            ELSE 'ELIGIBLE'
+        END as final_eligibility_status
+    FROM final_analysis v
+    LEFT JOIN contamination_risk c ON v.property_id = c.property_id
 )
 
 SELECT
-    v.property_id,
-    CONCAT('Fazenda ', SUBSTR(TO_HEX(MD5(v.property_id)), 1, 12)) as property_alias,
-    v.area_ha as property_area_ha,
-    v.area_ha,
-    v.city,
-    v.uf_origem,
-    v.registration_status as car_status,
-    v.biome_name,
-    -- CORREÇÃO: Geometria pode ser NULL agora (Brecha 1), mas o teste dbt pode reclamar. 
-    -- Se o teste for obrigatório, você precisará atualizar o YAML para allow_null: true
-    v.geometry,
+    property_id,
+    CONCAT('Fazenda ', SUBSTR(TO_HEX(MD5(property_id)), 1, 12)) as property_alias,
+    area_ha,
+    area_ha as property_area_ha,
+    city,
+    uf_origem,
+    registration_status as car_status,
+    biome_name,
+    geometry,
+    car_bbox,
+    final_eligibility_status,
+    is_technically_blocked,
 
     CASE 
-        WHEN v.is_missing_geometry THEN 'NOT ELIGIBLE - INVALID GEOMETRY'
-        WHEN v.internal_risks_found LIKE '%SOCIAL%' THEN 'NOT ELIGIBLE - SOCIAL'
-        WHEN v.internal_risks_found LIKE '%TRADITIONAL_TERRITORY%' THEN 'NOT ELIGIBLE - TRADITIONAL TERRITORY'
-        WHEN v.internal_risks_found LIKE '%CONSERVATION_UNIT%' THEN 'NOT ELIGIBLE - CONSERVATION UNIT'
-        WHEN v.total_protected_overlap_ha > {{ gis_noise_ha }} THEN 'NOT ELIGIBLE - CONSERVATION UNIT'
-        WHEN v.internal_risks_found LIKE '%CAR_STATUS%' THEN 'NOT ELIGIBLE - CAR STATUS'
-        WHEN v.internal_risks_found LIKE '%CMN_5081%' THEN 'NOT ELIGIBLE - IBAMA AMAZON (CMN 5.081)'
-        WHEN v.eudr_deforested_ha > {{ gis_noise_ha }} THEN 'NOT ELIGIBLE - EUDR VIOLATION (POST-2020)'
-        WHEN v.internal_risks_found LIKE '%IBAMA%' THEN 'NOT ELIGIBLE - IBAMA'
-        WHEN v.internal_risks_found LIKE '%MAPBIOMAS%' THEN 'NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)'
-        WHEN v.internal_risks_found LIKE '%SATELLITE%' THEN 'NOT ELIGIBLE - SATELLITE'
-        WHEN v.internal_risks_found LIKE '%CAR_OVERLAP%' THEN 'WARNING - HIGH CAR OVERLAP'
-        WHEN c.property_id IS NOT NULL THEN 'WARNING - RISK BY ADJACENCY'
-        WHEN v.internal_risks_found LIKE '%OLD_EMBARGO%' THEN 'WARNING - OLD EMBARGO'
-        WHEN v.internal_risks_found LIKE '%BORDERLINE_SLOPE%' THEN 'WARNING - BORDERLINE SLOPE'
-        WHEN v.internal_risks_found LIKE '%CLOUD_COVER%' THEN 'AWAITING CLEARANCE'
-        WHEN v.internal_risks_found LIKE '%RL_DEFICIT%' THEN 'CONDITIONAL - RL DEFICIT'
-        ELSE 'ELIGIBLE'
-    END as final_eligibility_status,
+        WHEN protected_area_overlap_ha > 0 AND protected_area_overlap_ha <= noise_threshold THEN 'LOW_CONFIDENCE - VECTOR ERROR (PROTECTED AREA)'
+        WHEN embargo_area_ha > 0 AND embargo_area_ha <= 0.1 THEN 'LOW_CONFIDENCE - MICRO EMBARGO'
+        WHEN mapbiomas_deforested_ha > 0 AND mapbiomas_deforested_ha <= noise_threshold THEN 'LOW_CONFIDENCE - MICRO DEFORESTATION'
+        WHEN max_slope_degrees > 45 AND max_slope_degrees <= 46.5 THEN 'LOW_CONFIDENCE - SENSOR NOISE (SLOPE)'
+        WHEN car_on_car_overlap_pct > 0 AND car_on_car_overlap_pct < 5.0 THEN 'LOW_CONFIDENCE - BOUNDARY DISPUTE'
+        WHEN data_source_quality LIKE 'PREMIUM%' THEN 'HIGH_CONFIDENCE - STATE VERIFIED'
+        ELSE 'HIGH_CONFIDENCE - VALID SPATIAL INTERSECTION'
+    END as geospatial_confidence_level,
 
+    embargo_fixed_ha as embargo_area_ha,
+    has_any_active_embargo as is_embargo_active,
+    embargo_offenders,
+    embargo_processes,
+    embargo_tax_ids,
+    embargo_reported_areas,
+    ARRAY_TO_STRING(embargo_sources, ' | ') as embargo_sources_string,
+
+    defo_fixed_ha as mapbiomas_deforested_ha,
+    eudr_deforested_ha,
+    mapbiomas_classes as deforestation_types,
+    mapbiomas_report_links as official_reports_urls,
+    earliest_evidence_date as evidence_date_before,
+    latest_evidence_date as evidence_date_after,
+    CASE WHEN eudr_deforested_ha > 0 THEN TRUE ELSE FALSE END as is_eudr_restricted,
+
+    protected_area_fixed_ha as protected_area_overlap_ha,
+    protected_area_fixed_ha as protected_overlap_ha,
+    is_protected_area_overlap,
+    car_on_car_overlap_pct,
+    CASE WHEN slave_labor_match_confidence IS NOT NULL THEN area_ha ELSE 0 END as slave_labor_overlap_ha,
+
+    COALESCE(defo_fixed_ha * fine_defo, 0) as liability_deforestation_brl,
+    COALESCE(rl_deficit_ha * fine_rl, 0) as liability_rl_brl,
+    COALESCE(protected_area_fixed_ha * fine_protected, 0) as liability_protected_areas_brl,
+    CASE WHEN slave_labor_match_confidence IS NOT NULL THEN fine_slave ELSE 0 END as liability_social_brl,
+    CASE WHEN app_deforested_ha_forensic > 0 THEN fine_app ELSE 0 END as liability_app_brl,
+
+    (COALESCE(defo_fixed_ha * fine_defo, 0) + 
+     COALESCE(rl_deficit_ha * fine_rl, 0) + 
+     COALESCE(protected_area_fixed_ha * fine_protected, 0) + 
+     CASE WHEN app_deforested_ha_forensic > 0 THEN fine_app ELSE 0 END +
+     CASE WHEN slave_labor_match_confidence IS NOT NULL THEN fine_slave ELSE 0 END) as estimated_financial_liability_brl,
+
+    -- Evidências Técnicas
+    ARRAY_TO_STRING(ARRAY(
+        SELECT x FROM UNNEST([
+            CASE WHEN slave_labor_match_confidence = 'HIGH' THEN 'SOCIAL_CRITICAL' END,
+            CASE WHEN registration_status IN ('CANCELADO', 'SUSPENSO') THEN 'STATUS CAR IRREGULAR' END,
+            CASE WHEN forensic_ti_ha > 0 THEN 'ÁREA INDÍGENA' END,
+            CASE WHEN forensic_quilombo_ha > 0 THEN 'QUILOMBOLA' END,
+            CASE WHEN forensic_uc_ha > 0 THEN 'UNIDADE DE CONSERVAÇÃO' END,
+            CASE WHEN forensic_settlement_ha > 0 THEN 'ASSENTAMENTO' END,
+            CASE WHEN forensic_traditional_ha > 0 THEN 'TERRITÓRIO TRADICIONAL' END,
+            CASE WHEN (biome_name LIKE 'AMAZ%NIA' AND embargo_area_ha >= 0.001 AND (embargo_date >= forest_code_date OR embargo_date IS NULL)) THEN 'EMBARGO AMAZÔNIA (CMN 5.081)' END,
+            CASE WHEN embargo_area_ha > 0.1 AND (embargo_date >= forest_code_date OR embargo_date IS NULL) THEN 'EMBARGO ATIVO' END,
+            CASE WHEN mapbiomas_deforested_ha > noise_threshold AND mapbiomas_date >= forest_code_date THEN 'MAPBIOMAS' END,
+            CASE WHEN app_deforested_ha_forensic > 0 THEN 'DESMATAMENTO EM APP' END,
+            CASE WHEN eudr_deforested_ha > 0 THEN 'RESTRIÇÃO EXPORTAÇÃO (EUDR)' END,
+            CASE WHEN max_slope_degrees > 45 THEN 'DECLIVIDADE' END
+        ]) AS x WHERE x IS NOT NULL
+    ), ' | ') as internal_risks_found,
+
+    adjacency_details,
     CONCAT(
-        CASE WHEN v.detailed_evidence_string != '' THEN CONCAT("⚠️ RESTRIÇÕES: ", v.detailed_evidence_string, " | ") ELSE "✅ EM CONFORMIDADE | " END,
-        CASE WHEN c.property_id IS NOT NULL THEN CONCAT("🚧 VIZINHANÇA: Vizinho com[", c.neighbor_statuses, "] | ") ELSE "" END,
-        CONCAT("📊 MÉTRICAS: ", v.compliance_metrics_string)
+        "⚠️ RESTRIÇÕES: ",
+        IF(final_eligibility_status LIKE 'NOT ELIGIBLE%', final_eligibility_status, "SEM BLOQUEIOS ATIVOS"),
+        IF(adjacency_details IS NOT NULL, CONCAT(" | 🏠 VIZINHO: ", adjacency_details), "")
     ) as technical_evidence,
+    
+    ARRAY_TO_STRING(ARRAY(
+        SELECT x FROM UNNEST([
+            CASE WHEN has_any_cancelled_embargo = TRUE THEN 'Embargo Cancelado' END,
+            CASE WHEN mapbiomas_deforested_ha > noise_threshold AND mapbiomas_date < forest_code_date THEN 'Desmatamento Pré-2008' END,
+            CASE WHEN rl_deficit_ha > 0.01 THEN 'Déficit de RL' END
+        ]) AS x WHERE x IS NOT NULL
+    ), ' | ') as historical_warnings,
 
-    v.internal_risks_found,
-    c.neighbor_statuses as adjacency_details,
-    ARRAY_TO_STRING(v.slave_labor_employers, ' | ') as slave_labor_offender,
-    ST_Y(v.centroid) as latitude,
-    ST_X(v.centroid) as longitude,
-    v.max_slope_degrees,
-    v.general_ndvi_mean,
-    v.app_ndvi_mean,
+    mapbiomas_date as mapbiomas_detection_date,
+    COALESCE(embargo_date, CAST('1900-01-01' AS DATE)) as embargo_date,
+    slave_labor_inclusion_date,
+    CURRENT_TIMESTAMP() as analyzed_at,
+    last_update as processed_at,
+    ST_Y(centroid) as latitude,
+    ST_X(centroid) as longitude,
 
-    v.embargo_area_ha,
-    v.mapbiomas_deforested_ha,
-    v.eudr_deforested_ha,
-    v.mapbiomas_alert_id,
-    v.rl_status,
-    v.rl_deficit_ha,
-    v.rl_balance_ha,
-    -- CORREÇÃO: Restaurando os nomes originais para os testes customizados passarem
-    v.total_protected_overlap_ha as protected_area_overlap_ha,
-    v.total_protected_overlap_ha as protected_overlap_ha,
-    v.car_on_car_overlap_pct,
-    (v.is_ti_overlap OR v.is_quilombola_overlap OR v.is_uc_overlap) as is_protected_area_overlap,
+    max_slope_degrees,
+    relief_classification,
+    rl_status,
+    rl_deficit_ha,
+    rl_balance_ha
 
-    (LEAST(GREATEST(COALESCE(v.mapbiomas_deforested_ha, 0), COALESCE(v.embargo_area_ha, 0)), v.area_ha) * {{ fine_defo }}) as liability_deforestation_brl,
-    (LEAST(COALESCE(v.rl_deficit_ha, 0), v.area_ha) * {{ fine_rl }}) as liability_rl_brl,
-    (LEAST(COALESCE(v.total_protected_overlap_ha, 0), v.area_ha) * {{ fine_protected }}) as liability_protected_areas_brl,
-    CASE WHEN v.slave_labor_match != 'NONE' THEN {{ fine_slave }} ELSE 0 END as liability_social_brl,
-    CASE WHEN v.is_app_violation_risk OR v.alert_selective_deforestation_in_app THEN {{ fine_app }} ELSE 0 END as liability_app_brl,
-
-    (
-        (LEAST(GREATEST(COALESCE(v.mapbiomas_deforested_ha, 0), COALESCE(v.embargo_area_ha, 0)), v.area_ha) * {{ fine_defo }}) +
-        (LEAST(COALESCE(v.rl_deficit_ha, 0), v.area_ha) * {{ fine_rl }}) +
-        (LEAST(COALESCE(v.total_protected_overlap_ha, 0), v.area_ha) * {{ fine_protected }}) +
-        (CASE WHEN v.slave_labor_match != 'NONE' THEN {{ fine_slave }} ELSE 0 END) +
-        (CASE WHEN v.is_app_violation_risk OR v.alert_selective_deforestation_in_app THEN {{ fine_app }} ELSE 0 END)
-    ) as estimated_financial_liability_brl,
-
-    v.car_registration_date,
-    v.car_last_update_date,
-    v.car_rectification_date,
-    v.slave_labor_inclusion_date,
-    v.embargo_date,
-    v.mapbiomas_date as mapbiomas_detection_date,
-    v.last_satellite_update as satellite_image_date,
-    CURRENT_TIMESTAMP() as analyzed_at
-
-FROM final_analysis v
-LEFT JOIN contamination_risk c ON v.property_id = c.property_id
+FROM final_status_calc

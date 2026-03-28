@@ -5,21 +5,7 @@
 
 WITH source_data AS (
     SELECT * FROM {{ source('raw_data', 'ibama_history') }}
-    WHERE UF IN ('MT', 'AM', 'RO', 'PA') -- Filtramos só os estados que temos no SIGEF para facilitar o JOIN depois
-),
-
-deduplicated AS (
-    SELECT 
-        *,
-        ROW_NUMBER() OVER (
-            PARTITION BY 
-                CAST(NUM_LONGITUDE_TAD AS STRING), 
-                CAST(NUM_LATITUDE_TAD AS STRING), 
-                CAST(DAT_EMBARGO AS STRING), 
-                CAST(GEOM_AREA_EMBARGADA AS STRING)
-            ORDER BY ingested_at DESC
-        ) as row_num
-    FROM source_data
+    WHERE uf IN ('MT', 'AM', 'RO', 'PA')
 ),
 
 renamed_and_filtered AS (
@@ -27,60 +13,84 @@ renamed_and_filtered AS (
         file_hash,
         ingested_at,
         
-        -- IDENTIFICAÇÃO: Limpeza de CPF/CNPJ (remove . , - /)
-        REGEXP_REPLACE(CAST(CPF_CNPJ_EMBARGADO AS STRING), r'[\.\-\/\,]', '') as tax_id,
+        -- IDENTIFICAÇÃO ÚNICA
+        CAST(seq_tad AS STRING) as embargo_id,
+        num_tad as tad_number,
+        num_processo as process_number,
         
-        -- 🟢 NOVO: Pegando o nome do infrator e padronizando (Maiúsculas e sem espaços sobrando)
-        TRIM(UPPER(CAST(NOME_EMBARGADO AS STRING))) as offender_name,
+        -- IDENTIFICAÇÃO DO INFRATOR
+        REGEXP_REPLACE(CAST(cpf_cnpj_embargado AS STRING), r'[\.\-\/\,]', '') as tax_id,
+        TRIM(UPPER(CAST(nome_embargado AS STRING))) as offender_name,
+        TRIM(UPPER(CAST(nome_imovel AS STRING))) as property_name_raw,
 
-        UF as state,
-        MUNICIPIO as city,
-        DES_STATUS_FORMULARIO as form_status,
-        TIPO_AREA as area_type,
+        -- LOCALIZAÇÃO
+        uf as state,
+        TRIM(UPPER(CAST(municipio AS STRING))) as city,
+        des_status_formulario as form_status,
+        tipo_area as area_type,
+        des_localizacao as location_description,
 
-        -- DATA: Garante o tipo DATE (Lógica original de parsing)
+        -- DATA COM TRATAMENTO DE ERRO
         COALESCE(
-            SAFE.PARSE_DATE('%d/%m/%Y', LEFT(TRIM(CAST(DAT_EMBARGO AS STRING)), 10)),
-            SAFE.PARSE_DATE('%Y-%m-%d', LEFT(TRIM(CAST(DAT_EMBARGO AS STRING)), 10)),
-            SAFE_CAST(LEFT(TRIM(CAST(DAT_EMBARGO AS STRING)), 10) AS DATE)
-        ) as embargo_date,
+            SAFE.PARSE_DATE('%d/%m/%Y', LEFT(TRIM(CAST(dat_embargo AS STRING)), 10)),
+            SAFE.PARSE_DATE('%Y-%m-%d', LEFT(TRIM(CAST(dat_embargo AS STRING)), 10)),
+            SAFE_CAST(LEFT(TRIM(CAST(dat_embargo AS STRING)), 10) AS DATE)
+        ) as raw_embargo_date,
 
-        -- ÁREA: Limpeza de separadores brasileiros
-        SAFE_CAST(REPLACE(REPLACE(CAST(QTD_AREA_EMBARGADA AS STRING), '.', ''), ',', '.') AS FLOAT64) as reported_area_ha,
+        -- ÁREA
+        SAFE_CAST(REPLACE(REPLACE(CAST(qtd_area_embargada AS STRING), '.', ''), ',', '.') AS FLOAT64) as reported_area_ha,
 
         -- COORDENADAS
         SAFE_CAST(
             CASE 
-                WHEN LENGTH(REGEXP_REPLACE(REPLACE(CAST(NUM_LONGITUDE_TAD AS STRING), ',', ''), r'\.', '')) > 5 
-                THEN REGEXP_REPLACE(REPLACE(CAST(NUM_LONGITUDE_TAD AS STRING), ',', ''), r'^(\-?\d{2})\.', r'\1')
-                ELSE REPLACE(REPLACE(CAST(NUM_LONGITUDE_TAD AS STRING), '.', ''), ',', '.')
+                WHEN LENGTH(REGEXP_REPLACE(REPLACE(CAST(num_longitude_tad AS STRING), ',', ''), r'\.', '')) > 5 
+                THEN REGEXP_REPLACE(REPLACE(CAST(num_longitude_tad AS STRING), ',', ''), r'^(\-?\d{2})\.', r'\1')
+                ELSE REPLACE(REPLACE(CAST(num_longitude_tad AS STRING), '.', ''), ',', '.')
             END AS FLOAT64
         ) as longitude,
 
         SAFE_CAST(
             CASE 
-                WHEN LENGTH(REGEXP_REPLACE(REPLACE(CAST(NUM_LATITUDE_TAD AS STRING), ',', ''), r'\.', '')) > 5 
-                THEN REGEXP_REPLACE(REPLACE(CAST(NUM_LATITUDE_TAD AS STRING), ',', ''), r'^(\-?\d{2})\.', r'\1')
-                ELSE REPLACE(REPLACE(CAST(NUM_LATITUDE_TAD AS STRING), '.', ''), ',', '.')
+                WHEN LENGTH(REGEXP_REPLACE(REPLACE(CAST(num_latitude_tad AS STRING), ',', ''), r'\.', '')) > 5 
+                THEN REGEXP_REPLACE(REPLACE(CAST(num_latitude_tad AS STRING), ',', ''), r'^(\-?\d{2})\.', r'\1')
+                ELSE REPLACE(REPLACE(CAST(num_latitude_tad AS STRING), '.', ''), ',', '.')
             END AS FLOAT64
         ) as latitude,
 
-        GEOM_AREA_EMBARGADA as geometry_wkt,
-        CASE WHEN DAT_DESEMBARGO IS NULL THEN TRUE ELSE FALSE END as is_active_embargo
+        -- GEOMETRIA ATUALIZADA COM MAKE_VALID
+        SAFE.ST_GEOGFROMTEXT(geom_area_embargada, make_valid => TRUE) as geometry,
 
-    FROM deduplicated
-    WHERE row_num = 1
+        -- STATUS JURÍDICO
+        CASE WHEN sit_cancelado = 'S' THEN TRUE ELSE FALSE END as is_cancelled,
+        
+        CASE 
+            WHEN dat_desembargo IS NULL AND (sit_cancelado = 'N' OR sit_cancelado IS NULL) THEN TRUE 
+            ELSE FALSE 
+        END as is_active_embargo
+
+    FROM source_data
+    WHERE seq_tad IS NOT NULL -- FILTRO ADICIONADO AQUI
 ),
 
--- NOVA ETAPA: Tratamento de erros humanos na data
+deduplicated AS (
+    SELECT 
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY embargo_id 
+            ORDER BY ingested_at DESC
+        ) as row_num
+    FROM renamed_and_filtered
+),
+
 final_cleaned AS (
     SELECT
-        * EXCEPT(embargo_date), -- Seleciona tudo, exceto a data antiga
+        * EXCEPT(raw_embargo_date, row_num),
         CASE 
-            WHEN embargo_date > CURRENT_DATE() THEN CURRENT_DATE()
-            ELSE embargo_date 
+            WHEN raw_embargo_date > CURRENT_DATE() THEN CURRENT_DATE()
+            ELSE raw_embargo_date 
         END AS embargo_date
-    FROM renamed_and_filtered
+    FROM deduplicated
+    WHERE row_num = 1
 )
 
 SELECT * FROM final_cleaned

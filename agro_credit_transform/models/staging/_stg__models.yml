@@ -18,6 +18,10 @@ models:
   - name: stg_ibama
     description: "Histórico de embargos do IBAMA em MT com limpeza de tax_id e coordenadas."
     columns:
+      - name: embargo_id
+        data_tests:
+          - unique
+          - not_null
       - name: tax_id
         description: "CPF/CNPJ do embargado limpo (sem pontuação)."
       - name: embargo_date
@@ -125,11 +129,106 @@ models:
       - name: registration_status
         description: "Situação do cadastro (Ativo, Pendente, etc)."
 
-  # --- ADICIONADO PARA COMPLETAR A LINHA DE DEFESA ---
   - name: stg_car_overlaps
     description: "Sobreposições nativas do SICAR (TIs, UCs, etc)."
     columns:
       - name: property_id
         description: "ID do CAR. Não é unique pois uma fazenda pode cruzar com TI e UC ao mesmo tempo."
+        data_tests:
+          - not_null
+
+  # --- NOVOS MODELOS DE EMBARGOS ---
+  - name: stg_siga_mt__embargos
+    description: "Novos polígonos de embargos do sistema SIGA (MT)."
+    columns:
+      - name: embargo_id
+        description: "ID único do embargo no SIGA."
+        data_tests:
+          - unique
+          - not_null
+      - name: geometry
+        description: "Polígono do embargo convertido para GEOGRAPHY."
+        data_tests:
+          - not_null
+
+  - name: stg_sema_mt__embargos
+    description: "Base histórica de embargos da SEMA (MT)."
+    columns:
+      - name: embargo_id
+        description: "ID único do embargo na base histórica (OBJECTID)."
+        data_tests:
+          - unique
+          - not_null
+      - name: geometry
+        description: "Polígono do embargo convertido para GEOGRAPHY."
+        data_tests:
+          - not_null
+
+  - name: stg_icmbio__embargos
+    description: "Infrações e embargos dentro de UCs federais (ICMBio)."
+    columns:
+      - name: embargo_id
+        description: "Número do embargo no ICMBio."
+        data_tests:
+          - unique
+          - not_null
+      - name: geometry
+        description: "Polígono do embargo convertido para GEOGRAPHY."
+        data_tests:
+          - not_null
+
+  # --- REFERÊNCIA TERRITORIAL (PAREDES) ---
+  - name: stg_icmbio__unidades_conservacao
+    description: "Limites das UCs Federais (ICMBio)."
+    columns:
+      - name: uc_id
+        data_tests:
+          - unique
+          - not_null
+      - name: geometry
+        data_tests:
+          - not_null
+
+  - name: stg_sema_mt__unidades_conservacao
+    description: "Limites das UCs Estaduais de MT (SEMA)."
+    columns:
+      - name: uc_id
+        data_tests:
+          - unique
+          - not_null
+      - name: geometry
+        data_tests:
+          - not_null
+
+  - name: stg_incra__assentamentos
+    description: "Assentamentos federais (INCRA)."
+    columns:
+      - name: settlement_id
+        data_tests:
+          - unique
+          - not_null
+      - name: geometry
+        data_tests:
+          - not_null
+
+  - name: stg_intermat__assentamentos
+    description: "Assentamentos estaduais de MT (INTERMAT)."
+    columns:
+      - name: settlement_id
+        data_tests:
+          - unique
+          - not_null
+      - name: geometry
+        data_tests:
+          - not_null
+
+  - name: stg_incra_quilombola_lands
+    description: "Territórios quilombolas oficiais (INCRA)."
+    columns:
+      - name: quilombo_id
+        data_tests:
+          - unique
+          - not_null
+      - name: geometry
         data_tests:
           - not_null

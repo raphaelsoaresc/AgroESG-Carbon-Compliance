@@ -46,39 +46,47 @@ models:
   # --- MODELOS DO MAPBIOMAS E COMPLIANCE ---
 
   - name: int_mapbiomas_deforestation
-    description: "Filtra alertas do MapBiomas que cruzam com imóveis (Opção 4) respeitando o Marco Temporal (Pós-Julho/2008)."
+    description: |
+      Filtra alertas do MapBiomas que cruzam com imóveis (CAR) respeitando o Marco Temporal (Pós-Julho/2008).
+      Inclui inteligência de perícia bitemporal, classificação EUDR e dados para auditoria (Double Check).
+    data_tests:
+      # Movido para nível de modelo para evitar erro de sintaxe no BigQuery
+      - dbt_utils.expression_is_true:
+          expression: "deforestation_overlap_ha > 0"
+          name: "int_mapbiomas_deforestation_area_positive"
     columns:
       - name: car_code
         description: "Código do imóvel (CAR)."
         data_tests:
           - not_null
-          # Garante integridade referencial com a tabela de propriedades
           - relationships:
               to: ref('stg_car_properties')
               field: property_id
       - name: alert_id
-        description: "ID do alerta de desmatamento."
+        description: "ID único do alerta no MapBiomas."
         data_tests:
           - not_null
-          # Um alerta pode aparecer em mais de um CAR se estiver na borda, mas aqui focamos na combinação
       - name: detection_date
         description: "Data da detecção do desmatamento (>= 2008-07-22)."
         data_tests:
           - not_null
-      - name: deforestation_overlap_ha
-        description: "Área desmatada dentro do imóvel."
+      - name: mapbiomas_url
+        description: "Link direto para o laudo oficial do MapBiomas Alerta."
         data_tests:
-          - dbt_utils.expression_is_true:
-              expression: "> 0"
+          - not_null
+      - name: deforestation_overlap_ha
+        description: "Área desmatada calculada pelo nosso motor GIS dentro do imóvel."
 
   - name: int_compliance__final_spatial_check
-    description: "Consolidação de todos os riscos espaciais (Trabalho Escravo, Embargos e MapBiomas)."
+    description: "Consolidação de todos os riscos espaciais (Trabalho Escravo, Embargos e MapBiomas/EUDR)."
     data_tests:
-      # NOVO TESTE: Previne fan-out garantindo que cada fazenda tenha apenas uma linha por tipo de risco agregado
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - car_property_id
             - risk_type
+      - dbt_utils.expression_is_true:
+          expression: "overlap_ha > 0"
+          name: "int_compliance_final_check_area_positive"
     columns:
       - name: car_property_id
         data_tests:
@@ -93,28 +101,76 @@ models:
               values:
                 - 'SOCIAL_RISK_SLAVE_LABOR'
                 - 'ENVIRONMENTAL_RISK_EMBARGO'
-                - 'ENVIRONMENTAL_RISK_DEFORESTATION' # O novo tipo do MapBiomas
-      - name: overlap_ha
-        data_tests:
-          - dbt_utils.expression_is_true:
-              expression: "> 0"
+                - 'ENVIRONMENTAL_RISK_DEFORESTATION'
 
   # --- NOVOS MODELOS ADICIONADOS PARA BLINDAGEM CONTRA FAN-OUT SILENCIOSO ---
 
-  - name: int_satellite_metrics_union
-    description: "União das métricas de satélite (NDVI, Declividade, etc) por propriedade."
-    columns:
-      - name: property_id
-        description: "Chave primária. DEVE ser única para não duplicar a fct_compliance_risk."
-        data_tests:
-          - unique
-          - not_null
 
   - name: int_car_spatial_restrictions
-    description: "Agregação de restrições espaciais (TIs, UCs, Quilombos) cruzadas via GIS."
+    description: "Agregação de restrições espaciais (TIs, UCs, Quilombos, Assentamentos) cruzadas via GIS."
     columns:
       - name: property_id
         description: "Chave primária. DEVE ser única (uma linha por fazenda com array de restrições)."
         data_tests:
           - unique
+          - not_null
+
+  # --- MODELOS DE EMBARGOS E REFERÊNCIA TERRITORIAL (PAREDES) ---
+
+  - name: int_all_embargoes
+    description: "União de todos os embargos (IBAMA, SIGA MT, SEMA MT, ICMBio) com geometrias válidas."
+    columns:
+      - name: embargo_id
+        data_tests:
+          - not_null
+      - name: source
+        data_tests:
+          - not_null
+      - name: geometry
+        data_tests:
+          - not_null
+
+  - name: int_property_embargo_overlap
+    description: "Cálculo de sobreposição espacial entre imóveis (CAR) e a base unificada de embargos."
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "total_embargo_area_ha > 0"
+          name: "int_property_embargo_overlap_area_positive"
+    columns:
+      - name: property_id
+        description: "Garante que cada CAR apareça apenas uma vez (agregado)."
+        data_tests:
+          - unique
+          - not_null
+
+  - name: int_brazil_reference_geometries
+    description: "Base unificada de restrições territoriais do Brasil (Biomas, TIs, UCs, Quilombos, Assentamentos, APPs)."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - restriction_id
+            - restriction_type
+    columns:
+      - name: geometry
+        data_tests:
+          - not_null
+
+  - name: int_compliance_forensic_shapes
+    description: "Recortes espaciais exatos (geometria bruta) para análise de satélite (CAR, SIGEF, Embargos, Desmatamento, Paredes)."
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "target_area_ha > 0"
+          name: "int_satellite_targets_area_positive"
+    columns:
+      - name: property_id
+        description: "Código do imóvel (CAR ou SIGEF)."
+        data_tests:
+          - not_null
+      - name: target_type
+        description: "Tipo do recorte gerado (ex: CAR_TOTAL, RECORTE_EMBARGO, RECORTE_INVASAO_TI)."
+        data_tests:
+          - not_null
+      - name: geometry
+        description: "Polígono exato da intersecção ou área total."
+        data_tests:
           - not_null

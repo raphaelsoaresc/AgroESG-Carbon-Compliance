@@ -3,9 +3,9 @@ version: 2
 models:
   - name: stg_property_topography
     description: >
-      Dados processados de relevo (SRTM), altitude e vegetação (Sentinel-2) 
-      extraídos via Google Earth Engine. Esta camada de staging padroniza 
-      as métricas físicas da propriedade.
+      Dados processados de relevo (SRTM) extraídos via Google Earth Engine. 
+      Esta camada padroniza as métricas físicas brutas da propriedade, 
+      que permanecem estáticas para análise de conformidade (APPs de declividade).
     columns:
       - name: property_id
         description: "ID único da propriedade (Recibo CAR)."
@@ -32,52 +32,7 @@ models:
           - accepted_values:
               values: ['PLANO', 'SUAVE ONDULADO', 'ONDULADO', 'FORTE ONDULADO', 'MONTANHOSO', 'ESCARPADO']
 
-      - name: ndvi_mean
-        description: "Média do índice de vegetação (NDVI) nos últimos 90 dias."
-        data_tests:
-          # O NDVI pode ser nulo em casos de cobertura de nuvens persistente
-          - dbt_utils.accepted_range:
-              min_value: -1
-              max_value: 1
-
-      - name: is_high_slope_risk
-        description: "Flag indicando se a declividade máxima ultrapassa 45 graus (Risco de APP)."
-        data_tests:
-          - not_null
-
-      - name: is_critical_environmental_violation
-        description: "Flag indicando violações críticas detectadas no processamento."
-        data_tests:
-          - not_null
-
       - name: processed_at
-        description: "Timestamp da extração dos dados de satélite."
-        data_tests:
-          - not_null
-
-  # =================================================================
-  # NOVO MODELO (stg_property_app_ndvi)
-  # =================================================================
-  - name: stg_property_app_ndvi
-    description: "NDVI cirúrgico das zonas de APP (margens de rios) limpo e deduplicado."
-    columns:
-      - name: property_id
-        description: "ID único da propriedade (vinculado ao CAR/SIGEF)."
-        data_tests:
-          - unique
-          - not_null
-
-      - name: app_ndvi_mean
-        description: "Média do NDVI apenas na área de APP recortada."
-
-      - name: app_vegetation_status
-        description: "Classificação da saúde da vegetação na APP (HEALTHY, RECOVERING, DEGRADED)."
-        data_tests:
-          - not_null
-          - accepted_values:
-              values: ['HEALTHY_APP', 'RECOVERING_APP', 'DEGRADED_APP', 'CLOUD_COVERED'] # <--- ESPAÇO CORRIGIDO AQUI TAMBÉM!
-
-      - name: is_app_violation_risk
-        description: "Flag booleana indicando se há risco de violação na APP (NDVI < 0.4)."
+        description: "Timestamp da última extração/processamento dos dados topográficos."
         data_tests:
           - not_null
