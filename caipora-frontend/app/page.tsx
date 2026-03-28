@@ -3,32 +3,39 @@ import Link from 'next/link';
 import Image from 'next/image';
 
 export default function Institucional() {
+  // Dados extraídos do seu banco para a tabela de estados
+  const stateData =[
+    { uf: 'PA', props: '378.265', area: '99M', falsos: '52.182', eudr: '52.779', cmn: '21.224', esg: '2.328', adj: '53.817' },
+    { uf: 'MT', props: '211.772', area: '100M', falsos: '28.023', eudr: '11.501', cmn: '13.276', esg: '1.346', adj: '38.849' },
+    { uf: 'RO', props: '188.623', area: '23M', falsos: '21.337', eudr: '16.282', cmn: '13.061', esg: '1.094', adj: '33.202' },
+    { uf: 'AM', props: '98.080', area: '93M', falsos: '15.299', eudr: '13.064', cmn: '8.644', esg: '1.433', adj: '12.096' },
+  ];
+
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900 flex flex-col">
       
       {/* NAVBAR INSTITUCIONAL */}
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-100 px-6 py-4">
-  <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-    {/* Logo com tamanho responsivo ajustado */}
-    <Link href="/" className="relative w-[280px] h-16 md:w-[550px] md:h-44 transition-transform hover:scale-105">
-      <Image 
-        src="/logo-agrimarket.jpg" 
-        alt="Agri-Market Intelligence Logo" 
-        fill 
-        className="object-contain object-center md:object-left" 
-        priority 
-      />
-    </Link>
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+          <Link href="/" className="relative w-[280px] h-16 md:w-[550px] md:h-44 transition-transform hover:scale-105">
+            <Image 
+              src="/logo-agrimarket.png" 
+              alt="Agri-Market Intelligence Logo" 
+              fill 
+              className="object-contain object-center md:object-left" 
+              priority 
+            />
+          </Link>
 
-    {/* Menu de links */}
-    <div className="flex flex-wrap justify-center gap-4 md:gap-10 items-center font-bold text-[10px] md:text-sm uppercase tracking-widest text-slate-600">
-      <a href="#solucoes" className="hover:text-green-600 transition-colors">Soluções</a>
-      <Link href="/caipora" className="bg-slate-900 text-white px-6 py-3 md:px-8 md:py-4 rounded-full hover:bg-green-600 transition-all shadow-xl">
-        Acessar Caipora
-      </Link>
-    </div>
-  </div>
-</nav>
+          <div className="flex flex-wrap justify-center gap-4 md:gap-10 items-center font-bold text-[10px] md:text-sm uppercase tracking-widest text-slate-600">
+            <a href="#solucoes" className="hover:text-green-600 transition-colors">Soluções</a>
+            <a href="#impacto" className="hover:text-green-600 transition-colors">Resultados</a>
+            <Link href="/caipora" className="bg-slate-900 text-white px-6 py-3 md:px-8 md:py-4 rounded-full hover:bg-green-600 transition-all shadow-xl">
+              Acessar Caipora
+            </Link>
+          </div>
+        </div>
+      </nav>
 
       {/* HERO SECTION */}
       <section className="relative pt-20 pb-32 px-6 overflow-hidden">
@@ -53,7 +60,6 @@ export default function Institucional() {
             </div>
           </div>
 
-          {/* IMAGEM DE PRODUTO (CAIPORA) */}
           <div className="relative h-[600px] rounded-[4rem] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.1)] border-[12px] border-slate-50">
              <Image src="/logo-caipora.jpg" alt="Caipora Sentinela Engine" fill className="object-cover" />
              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent flex items-end p-12">
@@ -71,25 +77,33 @@ export default function Institucional() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-24 space-y-6">
             <h2 className="text-5xl font-black uppercase tracking-tighter text-slate-900">Nossas Soluções</h2>
-            <p className="text-xl text-slate-500 max-w-3xl mx-auto font-medium">Tecnologia proprietária para mitigar riscos socioambientais e garantir conformidade com as normas globais mais rigorosas.</p>
+            <p className="text-xl text-slate-500 max-w-3xl mx-auto font-medium">
+              Tecnologia proprietária para mitigar riscos socioambientais e garantir conformidade com as normas globais mais rigorosas.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+          {/* Alterado para md:grid-cols-2 para formar um quadrado perfeito (2x2) com os 4 itens */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             {[
-              {
-                title: "Compliance EUDR",
-                desc: "Análise automatizada de desmatamento pós-2020 para garantir elegibilidade de exportação para a União Europeia.",
-                icon: "🇪🇺"
+              { 
+                title: "Compliance EUDR", 
+                desc: "Análise automatizada de desmatamento pós-2020 para garantir elegibilidade de exportação para a União Europeia.", 
+                icon: "🇪🇺" 
               },
-              {
-                title: "Risk Automation",
-                desc: "Integração via API para esteiras de crédito agrícola com latência zero e precisão cirúrgica bitemporal.",
-                icon: "⚙️"
+              { 
+                title: "Risk Automation", 
+                desc: "Integração via API para esteiras de crédito agrícola com latência zero e precisão cirúrgica bitemporal.", 
+                icon: "⚙️" 
               },
-              {
-                title: "Market Intelligence",
-                desc: "Mapeamento de polos logísticos e análise de toxicidade de cadeias de suprimentos em tempo real.",
-                icon: "📈"
+              { 
+                title: "Market Intelligence", 
+                desc: "Mapeamento de polos logísticos e monitoramento Dinâmico de Cadeias de Suprimentos com Sincronização de Alta Frequência (D+7 a D+15).", 
+                icon: "📈" 
+              },
+              { 
+                title: "Data-as-a-Service", 
+                desc: "Acesso a datasets em GeoParquet com +870k registros. Sincronização dinâmica a cada 7-15 dias para máxima fidelidade geoespacial.", 
+                icon: "📦" 
               }
             ].map((item, i) => (
               <div key={i} className="bg-white p-12 rounded-[3rem] shadow-sm border border-slate-100 hover:border-green-500 hover:shadow-2xl hover:shadow-green-500/10 transition-all group">
@@ -98,6 +112,76 @@ export default function Institucional() {
                 <p className="text-slate-500 text-lg leading-relaxed">{item.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* NOVA SEÇÃO: DADOS E IMPACTO */}
+      <section id="impacto" className="bg-slate-900 py-32 px-6 text-white">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-20 space-y-6">
+            <span className="text-green-400 font-black uppercase tracking-[0.3em] text-sm">Nossos Resultados</span>
+            <h2 className="text-5xl font-black uppercase tracking-tighter text-white">Impacto em Escala Continental</h2>
+            <p className="text-xl text-slate-400 max-w-3xl mx-auto font-medium">
+              Volume de dados processados e riscos mitigados pelo nosso motor de inteligência em todo o território nacional.
+            </p>
+          </div>
+
+          {/* KPIs - Linha Brasil (Total) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+            {[
+              { label: "Área Monitorada", value: "314 Mi", suffix: "ha", color: "text-white" },
+              { label: "Propriedades Analisadas", value: "876.740", suffix: "", color: "text-white" },
+              { label: "Violações EUDR Barradas", value: "93.626", suffix: "", color: "text-red-400" },
+              { label: "Falsos Positivos Mitigados", value: "116.841", suffix: "", color: "text-green-400" }
+            ].map((kpi, i) => (
+              <div key={i} className="bg-slate-800/50 border border-slate-700 p-8 rounded-3xl hover:bg-slate-800 transition-colors">
+                <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mb-4">{kpi.label}</p>
+                <div className="flex items-baseline gap-2">
+                  <span className={`text-5xl font-black tracking-tighter ${kpi.color}`}>{kpi.value}</span>
+                  <span className="text-xl font-bold text-slate-500">{kpi.suffix}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabela de Estados */}
+          <div className="bg-slate-800/30 border border-slate-700 rounded-3xl overflow-hidden">
+            <div className="p-8 border-b border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4">
+              <h3 className="text-2xl font-bold">Detalhamento por Estado (Amazônia Legal)</h3>
+              <div className="flex gap-4 text-sm font-bold text-slate-400">
+                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-400"></span> Bloqueios CMN 5.081: 56.205</span>
+                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-400"></span> Conflitos ESG: 6.201</span>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse whitespace-nowrap">
+                <thead>
+                  <tr className="bg-slate-800/50 text-slate-400 text-xs uppercase tracking-widest">
+                    <th className="p-6 font-bold">Estado</th>
+                    <th className="p-6 font-bold">Propriedades</th>
+                    <th className="p-6 font-bold">Área (ha)</th>
+                    <th className="p-6 font-bold">Falsos Positivos</th>
+                    <th className="p-6 font-bold">Violações EUDR</th>
+                    <th className="p-6 font-bold">Bloqueios CMN</th>
+                    <th className="p-6 font-bold">Risco Adjacência</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700/50">
+                  {stateData.map((row, i) => (
+                    <tr key={i} className="hover:bg-slate-800/50 transition-colors">
+                      <td className="p-6 font-black text-lg">{row.uf}</td>
+                      <td className="p-6 font-mono text-slate-300">{row.props}</td>
+                      <td className="p-6 font-mono text-slate-300">{row.area}</td>
+                      <td className="p-6 font-mono text-green-400">{row.falsos}</td>
+                      <td className="p-6 font-mono text-red-400">{row.eudr}</td>
+                      <td className="p-6 font-mono text-orange-400">{row.cmn}</td>
+                      <td className="p-6 font-mono text-slate-300">{row.adj}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -132,28 +216,25 @@ export default function Institucional() {
         </div>
       </section>
 
-     {/* RODAPÉ MESTRE - UNIFICADO (COM O TEU SLOGAN) */}
+     {/* RODAPÉ MESTRE */}
       <footer className="bg-white border-t border-slate-200 pt-24 pb-12 px-6 mt-20">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-16 mb-16">
             
-            {/* Coluna 1: Logo Agri-Market (Tamanho Grande) */}
             <div className="space-y-8">
               <div className="relative w-72 h-32 md:w-[450px] md:h-48">
                 <Image 
-                  src="/logo-agrimarket.jpg" 
+                  src="/logo-agrimarket.png" 
                   alt="Agri-Market Intelligence & Risk Automation" 
                   fill 
                   className="object-contain object-left"
                 />
               </div>
-              {/* O TEU SLOGAN ABAIXO */}
               <p className="text-slate-500 text-xl leading-relaxed font-medium max-w-sm">
                 Dados que plantam, tecnologia que protege.
               </p>
             </div>
 
-            {/* Coluna 2: Contato Oficial */}
             <div className="space-y-6">
               <h5 className="font-black text-slate-900 uppercase tracking-[0.2em] text-sm border-l-4 border-green-500 pl-4">Contato Oficial</h5>
               <ul className="space-y-4 text-base text-slate-600">
@@ -172,7 +253,6 @@ export default function Institucional() {
               </ul>
             </div>
 
-            {/* Coluna 3: Data Sources */}
             <div className="space-y-6">
               <h5 className="font-black text-slate-900 uppercase tracking-[0.2em] text-sm border-l-4 border-green-500 pl-4">Data Sources</h5>
               <div className="flex flex-wrap gap-2">
@@ -188,7 +268,6 @@ export default function Institucional() {
             </div>
           </div>
 
-          {/* Barra Inferior: Copyright, Jurídico e API */}
           <div className="border-t border-slate-100 pt-10 flex flex-col md:flex-row justify-between items-center gap-8">
             <p className="text-sm text-slate-400 font-bold">
               © {new Date().getFullYear()} Agri-Market Intelligence & Risk Automation.

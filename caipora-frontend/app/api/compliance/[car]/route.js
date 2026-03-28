@@ -1,31 +1,58 @@
 import { NextResponse } from 'next/server';
 
 export async function GET(request, { params }) {
-  const { car } = await params; 
-  const carId = car;
-  
-  // 1. Verifique se não há uma barra sobrando no final da CAIPORA_API_URL no .env.local
-  const baseUrl = process.env.CAIPORA_API_URL.replace(/\/$/, ""); 
-  
-  // 2. Monte a URL (Verifique se o seu FastAPI usa /v1/compliance ou apenas /compliance)
-  const apiUrl = `${baseUrl}/compliance/car/${carId}`;
-
-  // LOG DE DEBUG - Isso vai aparecer no seu terminal (onde roda o npm run dev)
-  console.log("🚀 Chamando API original em:", apiUrl);
-
   try {
+    // 1. Garante que os params foram lidos (Next.js 15+)
+    const resolvedParams = await params;
+    // Tenta pegar 'car' ou 'id' (ajuste conforme o nome da sua pasta [car] ou [id])
+    const carId = resolvedParams.car || resolvedParams.id;
+
+    if (!carId) {
+      return NextResponse.json({ error: 'ID do imóvel não fornecido' }, { status: 400 });
+    }
+
+    // 2. Verifica se as variáveis de ambiente existem antes de usar
+    const rawBaseUrl = process.env.CAIPORA_API_URL || process.env.NEXT_PUBLIC_API_URL;
+    const apiKey = process.env.CAIPORA_API_KEY || process.env.NEXT_PUBLIC_API_KEY;
+
+    if (!rawBaseUrl) {
+      console.error("❌ ERRO: Variável CAIPORA_API_URL não definida!");
+      return NextResponse.json({ error: 'Configuração do servidor incompleta (URL)' }, { status: 500 });
+    }
+
+    const baseUrl = rawBaseUrl.replace(/\/$/, "");
+    const apiUrl = `${baseUrl}/compliance/car/${carId}`;
+
+    console.log("🚀 Chamando API original em:", apiUrl);
+
     const response = await fetch(apiUrl, {
+      method: 'GET',
       headers: {
-        'X-API-Key': process.env.CAIPORA_API_KEY,
+        'X-API-Key': apiKey || '',
         'Content-Type': 'application/json',
       },
+      // Evita que o Next.js use cache velho
+      cache: 'no-store'
     });
 
+    // 3. Verifica se a resposta é OK antes de tentar ler o JSON
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Backend retornou erro ${response.status}:`, errorText);
+      return NextResponse.json(
+        { error: 'Erro no backend', details: errorText }, 
+        { status: response.status }
+      );
+    }
+
     const data = await response.json();
-    console.log("📦 Resposta da API:", data); // Ver o que a API retornou
-    
     return NextResponse.json(data);
+
   } catch (error) {
-    return NextResponse.json({ error: 'Falha na conexão' }, { status: 500 });
+    console.error("💥 Erro fatal no Proxy do Front-end:", error);
+    return NextResponse.json(
+      { error: 'Falha interna no servidor do front', message: error.message }, 
+      { status: 500 }
+    );
   }
 }
