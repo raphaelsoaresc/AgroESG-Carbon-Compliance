@@ -1,4 +1,5 @@
 import os
+import asyncio
 import duckdb
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Security, Depends
@@ -9,23 +10,25 @@ from fastapi.security import APIKeyHeader
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import BaseModel, Field
 
-# Importando os roteadores refatorados
-from routers.compliance import router as compliance_router
-from routers.payments import router as payments_router
-
 # --- CONFIGURAÇÕES ---
 class Settings(BaseSettings):
     max_csv_rows: int = 500
     gcp_bucket_name: str 
     api_key_hash: str
-    gcs_parquet_path: str = "api_data/fct_compliance_latest.parquet"
-    local_parquet_path: str = "/tmp/compliance_data.parquet"
+    
+    # Tabela 1: Dados e Relatórios (Risk)
+    gcs_risk_path: str = "api_data/fct_compliance_latest.parquet"
+    local_risk_path: str = "/tmp/compliance_risk.parquet"
+    
+    # Tabela 2: Mapas e Geometrias (Geometries)
+    gcs_geom_path: str = "api_data/fct_compliance_geometries.parquet"
+    local_geom_path: str = "/tmp/compliance_geometries.parquet"
     
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
 
-# --- AUTENTICAÇÃO ADMIN (API KEY) ---
+# --- AUTENTICAÇÃO ---
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -34,10 +37,7 @@ def verify_api_key(plain_key: str, hashed_key: str):
 
 async def get_api_key(header_value: str = Security(api_key_header)):
     if not header_value or not verify_api_key(header_value, settings.api_key_hash):
-        raise HTTPException(
-            status_code=403, 
-            detail="Acesso negado: Token de Admin inválido ou ausente."
-        )
+        raise HTTPException(status_code=403, detail="Acesso negado.")
     return header_value
 
 # --- BANCO DE DADOS ---
@@ -45,30 +45,37 @@ db_con = None
 
 def load_data():
     global db_con
-    local_file = settings.local_parquet_path
+    tables = [
+        {"name": "compliance_data", "gcs": settings.gcs_risk_path, "local": settings.local_risk_path},
+        {"name": "map_data", "gcs": settings.gcs_geom_path, "local": settings.local_geom_path}
+    ]
     
-    if os.path.exists(local_file):
-        print(f"✅ Arquivo local encontrado em {local_file}. Pulando download...")
-    else:
-        print(f"🔄 Baixando dados do GCS ({settings.gcs_parquet_path})...")
-        try:
-            storage_client = storage.Client()
-            bucket = storage_client.bucket(settings.gcp_bucket_name)
-            blob = bucket.blob(settings.gcs_parquet_path)
-            blob.download_to_filename(local_file)
-            print("✅ Download concluído.")
-        except Exception as e:
-            print(f"❌ Erro ao baixar do GCS: {e}")
-            return False
-
     try:
-        db_con.execute(f"CREATE OR REPLACE TABLE compliance_data AS SELECT * FROM read_parquet('{local_file}')")
-        count = db_con.execute("SELECT count(*) FROM compliance_data").fetchone()[0]
-        print(f"✅ DuckDB carregado: {count} registros.")
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(settings.gcp_bucket_name)
+
+        for table in tables:
+            print(f"🔄 [GCS] Baixando {table['gcs']}...")
+            blob = bucket.blob(table["gcs"])
+            blob.download_to_filename(table["local"], timeout=600)
+            
+            print(f"✅ [DuckDB] Carregando {table['name']}...")
+            # Agora que o dado é UTF-8, o read_parquet padrão funciona perfeitamente
+            db_con.execute(f"CREATE OR REPLACE TABLE {table['name']} AS SELECT * FROM read_parquet('{table['local']}')")
+            
+            count = db_con.execute(f"SELECT count(*) FROM {table['name']}").fetchone()[0]
+            print(f"✨ Tabela {table['name']} pronta: {count} registros.")
+        
         return True
     except Exception as e:
-        print(f"❌ Erro ao carregar no DuckDB: {e}")
+        print(f"❌ [ERRO CRÍTICO] Falha no carregamento: {e}")
         return False
+
+async def background_load_data():
+    """Aguarda a API subir e inicia a carga pesada"""
+    await asyncio.sleep(2)
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, load_data)
 
 # --- LIFESPAN ---
 @asynccontextmanager
@@ -80,52 +87,48 @@ async def lifespan(app: FastAPI):
     os.makedirs('/tmp/duckdb_extensions', exist_ok=True)
     db_con.execute("SET extension_directory='/tmp/duckdb_extensions';")
     db_con.execute("INSTALL spatial; LOAD spatial;")
-
-    success = load_data()
-    if not success:
-        print("❌ FALHA CRÍTICA: Não foi possível carregar os dados.")
     
-    # IMPORTANTE: Injeta a conexão no app.state para os routers poderem usar!
     app.state.db_con = db_con
+    asyncio.create_task(background_load_data())
     
     yield
     if db_con:
         db_con.close()
 
-# --- INICIALIZAÇÃO DO APP ---
-app = FastAPI(
-    title="Caipora Sentinela API", 
-    version="3.1.0", 
-    lifespan=lifespan,
-)
+# --- APP ---
+app = FastAPI(title="Caipora Sentinela API", version="3.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"]
+    allow_headers=["*"]
 )
 
-# Registrando as rotas refatoradas
+from routers.compliance import router as compliance_router
+from routers.payments import router as payments_router
 app.include_router(compliance_router)
 app.include_router(payments_router)
 
-# --- ROTAS DE SISTEMA / ADMIN ---
-class HealthResponse(BaseModel):
-    status: str = Field(..., example="online")
-    engine: str = Field(..., example="DuckDB + Spatial")
-    version: str = Field(..., example="3.1.0")
-
-@app.get("/health", response_model=HealthResponse, tags=["System"])
+@app.get("/health", tags=["System"])
 async def health():
-    return {"status": "online", "engine": "DuckDB + Spatial", "version": "3.1.0"}
+    tables = []
+    if db_con:
+        try:
+            res = db_con.execute("PRAGMA show_tables").fetchall()
+            tables = [t[0] for t in res]
+        except:
+            pass
+    return {
+        "status": "online", 
+        "tables_loaded": tables
+    }
 
 @app.post("/admin/refresh-data", tags=["System"])
 async def refresh_data(api_key: str = Depends(get_api_key)):
-    """Força a API a baixar o GeoParquet mais recente do GCS (Requer API Key)."""
-    success = load_data()
-    if success:
+    if os.path.exists(settings.local_risk_path): os.remove(settings.local_risk_path)
+    if os.path.exists(settings.local_geom_path): os.remove(settings.local_geom_path)
+    if load_data():
         return {"message": "Dados atualizados com sucesso!"}
     raise HTTPException(status_code=500, detail="Falha ao atualizar dados.")

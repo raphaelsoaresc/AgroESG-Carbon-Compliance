@@ -25,10 +25,13 @@ supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
 # Esquema de segurança para ler o Token JWT do cabeçalho
 security = HTTPBearer(auto_error=False)
 
+ADMIN_EMAIL = "rsdcruz97@gmail.com"
+
 DEMO_IDS =[
-    'MT-5107859-9DFDE64A2FFC4556B116F9BDE0C6595F',
-    'AM-1303569-85EECD549EC34411BEBF5142E59E304A',
-    'PA-1503754-5E969C33E8D14256A06C6452F71A113D'
+    'PA-1505304-BB9F3EB9FBCD498BB2F07BB62EE58B4E',
+    'AM-1300706-913A813EECC74CA5A6132C87A2937749',
+    'RO-1100015-14CB641F157841879704E86D3CC1E82D',
+    'MT-5103254-1882F7966B924166AC9FDD47FDA76662'
 ]
 
 async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[str]:
@@ -43,12 +46,16 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
     return None
 
 def check_user_permission(email: str, car_id: str) -> bool:
+    # REGRA 0: Admin bypass
+    if email == ADMIN_EMAIL:
+        return True
+
     # Check 1: Compra avulsa
     purchase = supabase.table("single_purchases").select("id").eq("email", email).eq("car_id", car_id).execute()
     if purchase.data and len(purchase.data) > 0:
         return True
 
-    # Check 2: Plano PRO e Limite de 70
+    # Check 2: Plano PRO e Limite de 50
     profile = supabase.table("profiles").select("plan_type").eq("email", email).execute()
     
     if profile.data and len(profile.data) > 0:
@@ -56,7 +63,7 @@ def check_user_permission(email: str, car_id: str) -> bool:
             start_of_period = (datetime.now() - timedelta(days=30)).isoformat()
             usage = supabase.table("usage_logs").select("id").eq("email", email).gt("queried_at", start_of_period).execute()
             
-            if usage.data is not None and len(usage.data) < 70:
+            if usage.data is not None and len(usage.data) < 50:
                 return True
                 
     return False
