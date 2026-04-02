@@ -1,5 +1,11 @@
 cat > .gcloudignore <<EOF
-# --- Ambiente Nix e Python (O PESO ESTÁ AQUI) ---
+# --- Arquivos de Sistema e Sockets (CORREÇÃO DO ERRO) ---
+gunicorn.ctl
+*.ctl
+*.sock
+.DS_Store
+
+# --- Ambiente Nix e Python ---
 .devenv/
 .direnv/
 .venv/
@@ -28,9 +34,9 @@ __pycache__/
 *.json
 data/
 logs/
+/tmp/
 
 # --- Pastas do Projeto não usadas na API ---
-# (Baseado na sua lista, a API só usa main.py e schemas.py)
 agro_credit_transform/
 airflow/
 assets/
@@ -46,7 +52,7 @@ tests/
 .streamlit/
 app.py
 Dockerfile.streamlit
-requirements.txt
+# requirements.txt  <-- Removi do ignore caso sua API precise dele!
 
 # --- Outros ---
 README.md

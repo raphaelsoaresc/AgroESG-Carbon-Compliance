@@ -70,3 +70,5 @@ dist/
 .ipynb_checkpoints
 .direnv/
 deploy-staging.sh
+
+node_modules/

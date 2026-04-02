@@ -58,6 +58,7 @@ dependencies = [
     "weasyprint>=68.1",
     "fpdf2>=2.8.7",
     "pillow>=12.1.1",
+    "pdfplumber>=0.11.9",
 ]
 
 [tool.uv]
