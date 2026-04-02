@@ -1,61 +1,70 @@
 {{ config(
     materialized='table',
     schema='agro_esg_marts',
-    cluster_by=['property_id'],
-    tags=['gold', 'spatial', 'pericial']
+    cluster_by=['map_layer', 'property_id'],
+    tags=['gold', 'spatial', 'map_service']
 ) }}
 
-WITH property_base AS (
+WITH metadata AS (
     SELECT 
-        g.property_id,
-        g.geometry_simplified as geom_car_total,
-        g.area_ha
-    FROM {{ ref('int_car_geometries') }} g
-),
-
--- Agrupamos os recortes por tipo para garantir que cada fazenda tenha apenas UMA linha
-infraction_geoms AS (
-    SELECT 
-        property_id,
-        -- Unimos múltiplos recortes do mesmo tipo em um único objeto geográfico (ST_UNION_AGG)
-        ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_EMBARGO' THEN geometry_simplified END) as geom_embargos,
-        ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_MAPBIOMAS' THEN geometry_simplified END) as geom_desmatamento,
-        ST_UNION_AGG(CASE WHEN target_type IN ('RECORTE_INVASAO_TI', 'RECORTE_INVASAO_UC', 'RECORTE_INVASAO_QUILOMBO') THEN geometry_simplified END) as geom_areas_protegidas,
-        ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_CONFLITO_APP' THEN geometry_simplified END) as geom_conflito_app
-    FROM (
-        -- Subquery para simplificar os recortes antes da união
-        SELECT property_id, target_type, ST_SIMPLIFY(geometry, 20) as geometry_simplified 
-        FROM {{ ref('int_compliance_forensic_shapes') }}
-    )
-    GROUP BY 1
-),
-
-metadata AS (
-    SELECT 
-        property_id,
-        property_alias,
+        UPPER(TRIM(property_id)) as property_id,
         final_eligibility_status,
-        embargo_area_ha,
-        mapbiomas_deforested_ha,
-        technical_evidence -- ADICIONADO AQUI
+        uf_origem,
+        -- Flags de Identidade (Essencial para o filtro de visualização no mapa)
+        COALESCE(is_settlement_identity, FALSE) as is_settlement_identity,
+        COALESCE(is_traditional_identity, FALSE) as is_traditional_identity,
+        COALESCE(is_quilombo_identity, FALSE) as is_quilombo_identity
     FROM {{ ref('fct_compliance_risk') }}
+),
+
+shapes_unioned AS (
+    -- 1. Geometria Principal do CAR
+    SELECT 
+        UPPER(TRIM(property_id)) as property_id,
+        'PROPERTY_BOUNDARY' as map_layer,
+        'CAR_TOTAL' as target_type,
+        ST_SIMPLIFY(geometry_raw, 0.0001) as geom 
+    FROM {{ ref('int_car_geometries') }}
+    
+    UNION ALL
+
+    -- 2. Todos os Recortes Periciais (Ajustado para o novo schema)
+    SELECT 
+        UPPER(TRIM(property_id)) as property_id,
+        CASE 
+            WHEN target_type = 'RECORTE_EMBARGO' THEN 'RESTRICTION_EMBARGO'
+            WHEN target_type = 'RECORTE_DESMATAMENTO_MAPBIOMAS' THEN 'RESTRICTION_DEFORESTATION'
+            WHEN target_type = 'RECORTE_DESMATAMENTO_EUDR' THEN 'RESTRICTION_DEFORESTATION'
+            WHEN target_type LIKE 'RECORTE_INVASAO_%' THEN 'RESTRICTION_SOCIAL_ENVIRONMENTAL'
+            WHEN target_type LIKE 'RECORTE_DESMATAMENTO_EM_APP%' THEN 'RESTRICTION_APP'
+            ELSE 'RESTRICTION_OTHERS'
+        END as map_layer,
+        target_type,
+        ST_SIMPLIFY(geometry, 0.0001) as geom
+    FROM {{ ref('int_compliance_forensic_shapes') }}
+    WHERE target_type NOT IN ('CAR_TOTAL', 'SIGEF_TOTAL')
 )
 
 SELECT
-    m.property_id,
-    m.property_alias,
+    s.property_id,
+    s.map_layer,
+    s.target_type,
     m.final_eligibility_status,
-    m.technical_evidence, -- ADICIONADO AQUI
-    p.area_ha as area_total_ha,
-    
-    -- GEOMETRIAS LADO A LADO (Sem duplicação de linhas)
-    p.geom_car_total,
-    i.geom_embargos,
-    i.geom_desmatamento,
-    i.geom_areas_protegidas,
-    i.geom_conflito_app,
-
+    m.uf_origem,
+    -- Cálculo de Bounding Box para zoom automático no mapa
+    (ST_BOUNDINGBOX(s.geom)).xmin as xmin,
+    (ST_BOUNDINGBOX(s.geom)).ymin as ymin,
+    (ST_BOUNDINGBOX(s.geom)).xmax as xmax,
+    (ST_BOUNDINGBOX(s.geom)).ymax as ymax,
+    s.geom as geometry,
     CURRENT_TIMESTAMP() as generated_at
-FROM metadata m
-JOIN property_base p ON m.property_id = p.property_id
-LEFT JOIN infraction_geoms i ON m.property_id = i.property_id
+FROM shapes_unioned s
+INNER JOIN metadata m ON s.property_id = m.property_id
+WHERE s.geom IS NOT NULL 
+  AND NOT ST_ISEMPTY(s.geom)
+  -- LÓGICA DE COMPLIANCE VISUAL:
+  -- Não mostra o polígono de "Invasão" se a propriedade for identificada como sendo daquela categoria
+  AND NOT (s.target_type = 'RECORTE_INVASAO_ASSENTAMENTO' AND m.is_settlement_identity)
+  AND NOT (s.target_type = 'RECORTE_INVASAO_QUILOMBO' AND m.is_quilombo_identity)
+  AND NOT (s.target_type = 'RECORTE_INVASAO_TERRA_INDIGENA' AND m.is_traditional_identity) -- Exemplo para TI
+  AND NOT (s.target_type = 'RECORTE_TRADITIONAL_TERRITORY' AND m.is_traditional_identity)

@@ -12,3 +12,5 @@ WHERE
     (biome_name = 'AMAZÔNIA' AND legal_reserve_perc != 0.80)
     OR
     (biome_name = 'CERRADO' AND legal_reserve_perc != 0.35)
+    OR
+    (biome_name = 'PANTANAL' AND legal_reserve_perc != 0.20)

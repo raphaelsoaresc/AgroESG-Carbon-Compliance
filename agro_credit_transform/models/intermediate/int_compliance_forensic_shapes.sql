@@ -1,21 +1,30 @@
 {{ config(
     materialized='table',
     schema='agro_esg_intermediate',
-    cluster_by=['target_type', 'property_id', 'uf_origem']
+    cluster_by=['target_type', 'property_id', 'uf_origem'],
+    tags=['compliance', 'forensic']
 ) }}
 
 WITH 
 car_base AS (
-    SELECT property_id, uf_origem, geometry_raw as geometry, car_bbox 
+    SELECT 
+        property_id, 
+        uf_origem, 
+        geometry_raw as geometry, 
+        car_bbox,
+        ST_AREA(geometry_raw) / 10000 as property_total_area_ha
     FROM {{ ref('int_car_geometries') }}
 ),
 
 sigef_base AS (
-    SELECT property_id, state_abbreviation as uf_origem, geometry
+    SELECT 
+        property_id, 
+        state_abbreviation as uf_origem, 
+        geometry,
+        ST_AREA(geometry) / 10000 as property_total_area_ha
     FROM {{ ref('int_sigef_geometries') }}
 ),
 
--- 3. APP_ZONES: Buscando o Subtype para diferenciar Hídrica
 app_zones AS (
     SELECT 
         geometry,
@@ -27,7 +36,11 @@ app_zones AS (
 
 recortes_paredes AS (
     SELECT
-        c.property_id, c.uf_origem,
+        c.property_id, 
+        c.uf_origem,
+        c.property_total_area_ha,
+        CAST(r.restriction_id AS STRING) as target_id,
+        CAST(r.restriction_name AS STRING) as target_name,
         ST_INTERSECTION(c.geometry, r.geometry) as geometry,
         CASE 
             WHEN r.restriction_type = 'INDIGENOUS_LAND' THEN 'RECORTE_INVASAO_TI'
@@ -46,7 +59,11 @@ recortes_paredes AS (
 
 recortes_embargos AS (
     SELECT
-        c.property_id, c.uf_origem,
+        c.property_id, 
+        c.uf_origem,
+        c.property_total_area_ha,
+        CAST(NULL AS STRING) as target_id,
+        CAST(NULL AS STRING) as target_name,
         ST_INTERSECTION(c.geometry, e.geometry) as geometry,
         'RECORTE_EMBARGO' as target_type
     FROM car_base c
@@ -55,7 +72,11 @@ recortes_embargos AS (
 
 recortes_desmatamento AS (
     SELECT 
-        c.property_id, c.uf_origem,
+        c.property_id, 
+        c.uf_origem,
+        c.property_total_area_ha,
+        CAST(a.alert_id AS STRING) as target_id,
+        CAST(a.land_use_class AS STRING) as target_name,
         ST_INTERSECTION(c.geometry, a.geometry) as geometry,
         'RECORTE_DESMATAMENTO_MAPBIOMAS' as target_type
     FROM {{ ref('stg_mapbiomas_property_crossings') }} x
@@ -65,10 +86,13 @@ recortes_desmatamento AS (
       AND ST_INTERSECTS(c.geometry, a.geometry)
 ),
 
--- 7. Recorte Forense: Especificando APP Hídrica
 recortes_desmatamento_app AS (
     SELECT
-        rd.property_id, rd.uf_origem,
+        rd.property_id, 
+        rd.uf_origem,
+        rd.property_total_area_ha,
+        rd.target_id,
+        rd.target_name,
         ST_INTERSECTION(rd.geometry, app.geometry) as geometry,
         CASE 
             WHEN app.restriction_subtype IN ('RIVER', 'WATER_BODY') THEN 'RECORTE_DESMATAMENTO_EM_APP_HIDRICA'
@@ -79,24 +103,32 @@ recortes_desmatamento_app AS (
 ),
 
 unioned AS (
-    SELECT property_id, uf_origem, geometry, 'CAR_TOTAL' as target_type FROM car_base
+    SELECT property_id, uf_origem, property_total_area_ha, CAST(NULL AS STRING) as target_id, CAST(NULL AS STRING) as target_name, geometry, 'CAR_TOTAL' as target_type FROM car_base
     UNION ALL
-    SELECT property_id, uf_origem, geometry, 'SIGEF_TOTAL' as target_type FROM sigef_base
+    SELECT property_id, uf_origem, property_total_area_ha, CAST(NULL AS STRING) as target_id, CAST(NULL AS STRING) as target_name, geometry, 'SIGEF_TOTAL' as target_type FROM sigef_base
     UNION ALL
-    SELECT property_id, uf_origem, geometry, target_type FROM recortes_paredes
+    SELECT property_id, uf_origem, property_total_area_ha, target_id, target_name, geometry, target_type FROM recortes_paredes
     UNION ALL
-    SELECT property_id, uf_origem, geometry, target_type FROM recortes_embargos
+    SELECT property_id, uf_origem, property_total_area_ha, target_id, target_name, geometry, target_type FROM recortes_embargos
     UNION ALL
-    SELECT property_id, uf_origem, geometry, target_type FROM recortes_desmatamento
+    SELECT property_id, uf_origem, property_total_area_ha, target_id, target_name, geometry, target_type FROM recortes_desmatamento
     UNION ALL
-    SELECT property_id, uf_origem, geometry, target_type FROM recortes_desmatamento_app
+    SELECT property_id, uf_origem, property_total_area_ha, target_id, target_name, geometry, target_type FROM recortes_desmatamento_app
 )
 
 SELECT
-    property_id, target_type, uf_origem,
+    property_id, 
+    target_type, 
+    target_id,
+    target_name,
+    uf_origem,
     CASE WHEN uf_origem = 'MT' THEN 'PREMIUM (FEDERAL + ESTADUAL)' ELSE 'STANDARD (FEDERAL)' END as data_source_quality,
     geometry,
     ST_AREA(geometry) / 10000 as target_area_ha,
+    property_total_area_ha,
+    SAFE_DIVIDE((ST_AREA(geometry) / 10000), property_total_area_ha) * 100 as overlap_pct,
     CURRENT_TIMESTAMP() as processed_at
 FROM unioned
-WHERE geometry IS NOT NULL AND NOT ST_ISEMPTY(geometry) AND (ST_AREA(geometry) / 10000) > 0.0001
+WHERE geometry IS NOT NULL 
+  AND NOT ST_ISEMPTY(geometry) 
+  AND (ST_AREA(geometry) / 10000) > 0.0001

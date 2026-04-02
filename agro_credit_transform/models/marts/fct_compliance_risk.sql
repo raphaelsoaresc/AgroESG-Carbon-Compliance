@@ -12,6 +12,7 @@ WITH legal_params AS (
         MAX(CASE WHEN parameter_name = 'fine_slave_labor_fixed' THEN CAST(value AS FLOAT64) END) as fine_slave,
         MAX(CASE WHEN parameter_name = 'fine_app_violation_fixed' THEN CAST(value AS FLOAT64) END) as fine_app,
         MAX(CASE WHEN parameter_name = 'fine_rl_deficit_per_ha' THEN CAST(value AS FLOAT64) END) as fine_rl,
+        MAX(CASE WHEN parameter_name = 'fine_embargo_per_ha' THEN CAST(value AS FLOAT64) END) as fine_embargo,
         MAX(CASE WHEN parameter_name = 'gis_noise_ha_threshold' THEN CAST(value AS FLOAT64) END) as noise_threshold,
         MAX(CASE WHEN parameter_name = 'eudr_cutoff_date' THEN CAST(value AS DATE) END) as eudr_date,
         MAX(CASE WHEN parameter_name = 'forest_code_cutoff_date' THEN CAST(value AS DATE) END) as forest_code_date
@@ -21,17 +22,23 @@ WITH legal_params AS (
 properties AS (
     SELECT
         UPPER(TRIM(p_meta.property_id)) as property_id,
-        COALESCE(g.area_ha, p_meta.area_ha, 0) as area_ha,
+        p_meta.property_type,
+        COALESCE(p_class.final_area_ha, 0) as area_ha,
         p_meta.city,
         UPPER(TRIM(p_meta.uf_origem)) as uf_origem,
         COALESCE(TRIM(o.registration_status), 'ATIVO') as registration_status,
         g.geometry_raw as geometry,
         g.centroid,
         g.car_bbox,
-        CASE WHEN g.geometry_raw IS NULL THEN TRUE ELSE FALSE END as is_missing_geometry
+        CASE WHEN g.geometry_raw IS NULL THEN TRUE ELSE FALSE END as is_missing_geometry,
+        p_class.final_fiscal_modules as fiscal_modules,
+        p_class.producer_size_category,
+        p_class.is_small_holder,
+        p_class.fmp_ha
     FROM {{ ref('stg_car_properties') }} p_meta
     LEFT JOIN {{ ref('int_car_geometries') }} g ON UPPER(TRIM(p_meta.property_id)) = UPPER(TRIM(g.property_id))
     LEFT JOIN {{ ref('stg_car_owners') }} o ON UPPER(TRIM(p_meta.property_id)) = UPPER(TRIM(o.property_id))
+    LEFT JOIN {{ ref('int_car_properties_classified') }} p_class ON UPPER(TRIM(p_meta.property_id)) = p_class.property_id
 ),
 
 forensic_areas AS (
@@ -45,9 +52,15 @@ forensic_areas AS (
         SUM(CASE WHEN target_type = 'RECORTE_INVASAO_TI' THEN target_area_ha ELSE 0 END) as forensic_ti_ha,
         SUM(CASE WHEN target_type = 'RECORTE_INVASAO_QUILOMBO' THEN target_area_ha ELSE 0 END) as forensic_quilombo_ha,
         SUM(CASE WHEN target_type = 'RECORTE_INVASAO_UC' THEN target_area_ha ELSE 0 END) as forensic_uc_ha,
-        -- Mapeamento solicitado: Assentamentos e Territórios Tradicionais
         SUM(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN target_area_ha ELSE 0 END) as forensic_settlement_ha,
         SUM(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN target_area_ha ELSE 0 END) as forensic_traditional_ha,
+        MAX(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN overlap_pct ELSE 0 END) as settlement_overlap_pct,
+        MAX(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN overlap_pct ELSE 0 END) as traditional_overlap_pct,
+        ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN target_name END) as settlement_name,
+        ANY_VALUE(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN target_name END) as traditional_name,
+        ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_TI' THEN target_name END) as ti_name,
+        ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_UC' THEN target_name END) as uc_name,
+        ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_QUILOMBO' THEN target_name END) as quilombo_name,
         MAX(data_source_quality) as data_source_quality
     FROM {{ ref('int_compliance_forensic_shapes') }}
     GROUP BY 1
@@ -116,7 +129,8 @@ full_context AS (
         mb.earliest_evidence_date, mb.latest_evidence_date,
         mb.mapbiomas_classes, mb.mapbiomas_report_links,
         
-        CASE WHEN mb.latest_deforestation_date >= lp.eudr_date THEN COALESCE(f.forensic_defo_ha, 0) ELSE 0 END as eudr_deforested_ha,
+        CASE WHEN (mb.latest_deforestation_date >= lp.eudr_date OR mb.latest_deforestation_date IS NULL) 
+             THEN COALESCE(f.forensic_defo_ha, 0) ELSE 0 END as eudr_deforested_ha,
         
         sl.match_confidence as slave_labor_match_confidence,
         sl.slave_labor_inclusion_date,
@@ -127,6 +141,12 @@ full_context AS (
         CASE WHEN (COALESCE(f.forensic_ti_ha,0) + COALESCE(f.forensic_uc_ha,0) + COALESCE(f.forensic_quilombo_ha,0) + COALESCE(f.forensic_settlement_ha, 0) + COALESCE(f.forensic_traditional_ha, 0)) > 0 THEN TRUE ELSE FALSE END as is_protected_area_overlap,
         f.forensic_ti_ha, f.forensic_quilombo_ha, f.forensic_uc_ha, f.forensic_settlement_ha, f.forensic_traditional_ha, f.data_source_quality,
         
+        COALESCE(p.property_type = 'AST' OR f.settlement_overlap_pct > 90, FALSE) as is_settlement_identity,
+        COALESCE(p.property_type = 'PCT' OR f.traditional_overlap_pct > 90, FALSE) as is_traditional_identity,
+        COALESCE(p.property_type = 'PCT' AND f.forensic_quilombo_ha > 0, FALSE) as is_quilombo_identity,
+        
+        f.settlement_name, f.traditional_name, f.ti_name, f.uc_name, f.quilombo_name,
+
         COALESCE(so.overlap_pct, 0) as car_on_car_overlap_pct,
         COALESCE(so.total_overlapping_cars, 0) as total_overlapping_cars
     FROM properties p
@@ -136,7 +156,8 @@ full_context AS (
     LEFT JOIN embargo_check e ON p.property_id = e.property_id
     LEFT JOIN mapbiomas_check mb ON p.property_id = mb.property_id 
     LEFT JOIN slave_labor_combined sl ON p.property_id = sl.property_id
-    LEFT JOIN {{ ref('int_car_compliance_metrics') }} c ON p.property_id = c.property_id
+    LEFT JOIN {{ ref('int_car_compliance_metrics') }} c 
+    ON UPPER(TRIM(p.property_id)) = UPPER(TRIM(c.property_id))
     LEFT JOIN {{ ref('int_car_self_overlap') }} so ON p.property_id = so.property_id
 ),
 
@@ -147,18 +168,21 @@ final_analysis AS (
         LEAST(mapbiomas_deforested_ha, area_ha) as defo_fixed_ha,
         LEAST(embargo_area_ha, area_ha) as embargo_fixed_ha,
 
-        -- IS_TECHNICALLY_BLOCKED: Atualizado para incluir EUDR, Geometria e Assentamentos (Garante Adjacência correta)
         (
             (slave_labor_match_confidence = 'HIGH') OR 
             (registration_status IN ('CANCELADO', 'SUSPENSO')) OR 
             (is_missing_geometry = TRUE) OR
-            (forensic_ti_ha > 0.001 OR forensic_quilombo_ha > 0.001 OR forensic_uc_ha > 0.001 OR forensic_settlement_ha > 0.001 OR forensic_traditional_ha > 0.001) OR 
-            (mapbiomas_deforested_ha > noise_threshold AND mapbiomas_date >= forest_code_date) OR 
+            (forensic_ti_ha > 0.01 OR forensic_uc_ha > 0.01) OR 
+            (forensic_quilombo_ha > 0.01 AND is_quilombo_identity IS FALSE) OR
+            (forensic_settlement_ha > 0.01 AND is_settlement_identity IS FALSE) OR
+            (forensic_traditional_ha > 0.01 AND is_traditional_identity IS FALSE) OR
+            (mapbiomas_deforested_ha > LEAST(noise_threshold, 0.1) AND (mapbiomas_date >= forest_code_date OR mapbiomas_date IS NULL)) OR 
             (embargo_area_ha > 0.1 AND (embargo_date >= forest_code_date OR embargo_date IS NULL)) OR 
             (biome_name LIKE 'AMAZ%NIA' AND embargo_area_ha >= 0.001 AND (embargo_date >= forest_code_date OR embargo_date IS NULL)) OR
-            (app_deforested_ha_forensic > 0.001) OR 
-            (eudr_deforested_ha > 0) OR
+            (forensic_app_hidrica_ha > 0.01 OR app_deforested_ha_forensic > 0.01) OR 
+            (eudr_deforested_ha > 0.01) OR
             (max_slope_degrees > 45) OR
+            (rl_deficit_ha > 0.01 AND is_small_holder IS FALSE) OR -- Adicionado para o teste de adjacência
             (EXISTS(SELECT 1 FROM UNNEST(embargo_sources) s WHERE s IN ('IBAMA', 'SEMA_MT', 'SIGA_MT', 'ICMBIO')))
         ) as is_technically_blocked
     FROM full_context
@@ -172,6 +196,7 @@ contamination_risk AS (
                 WHEN f2.slave_labor_match_confidence IS NOT NULL THEN 'SOCIAL'
                 WHEN f2.embargo_area_ha > 0.1 THEN 'EMBARGO'
                 WHEN f2.mapbiomas_deforested_ha > 0.1 THEN 'DESMATAMENTO'
+                WHEN f2.rl_deficit_ha > 0.01 AND f2.is_small_holder IS FALSE THEN 'RL_DEFICIT'
                 ELSE 'OUTROS'
             END
         ), ' | ') as neighbor_risks
@@ -193,42 +218,41 @@ final_status_calc AS (
         v.*,
         c.neighbor_risks as adjacency_details,
         CASE
-            -- GRUPO 1: BLOQUEIOS CRÍTICOS (NOT ELIGIBLE)
             WHEN v.slave_labor_match_confidence = 'HIGH' THEN 'NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)'
             WHEN v.registration_status IN ('CANCELADO', 'SUSPENSO') THEN 'NOT ELIGIBLE - CAR STATUS'
             WHEN v.is_missing_geometry = TRUE THEN 'NOT ELIGIBLE - INVALID GEOMETRY'
-            WHEN v.forensic_ti_ha > 0 THEN 'NOT ELIGIBLE - INDIGENOUS LAND'
-            WHEN v.forensic_quilombo_ha > 0 THEN 'NOT ELIGIBLE - QUILOMBOLA'
-            WHEN v.forensic_uc_ha > 0 THEN 'NOT ELIGIBLE - CONSERVATION UNIT'
-            WHEN v.forensic_settlement_ha > 0 THEN 'NOT ELIGIBLE - SETTLEMENT'
-            WHEN v.forensic_traditional_ha > 0 THEN 'NOT ELIGIBLE - TRADITIONAL TERRITORY'
-            WHEN v.forensic_app_hidrica_ha > 0 THEN 'NOT ELIGIBLE - APP DEFORESTATION (WATER)'
-            WHEN v.forensic_app_declividade_ha > 0 THEN 'NOT ELIGIBLE - APP DEFORESTATION (SLOPE)'
-            WHEN v.app_deforested_ha_forensic > 0 THEN 'NOT ELIGIBLE - APP DEFORESTATION'
-            WHEN v.eudr_deforested_ha > 0 THEN 'NOT ELIGIBLE - EUDR VIOLATION (POST-2020)'
-            WHEN v.mapbiomas_deforested_ha > v.noise_threshold AND v.mapbiomas_date >= v.forest_code_date THEN 'NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)'
-            WHEN v.biome_name LIKE 'AMAZ%NIA' AND v.embargo_area_ha >= 0.001 AND (v.embargo_date >= v.forest_code_date OR v.embargo_date IS NULL) THEN 'NOT ELIGIBLE - IBAMA AMAZON (CMN 5.081)'
-            WHEN EXISTS(SELECT 1 FROM UNNEST(v.embargo_sources) s WHERE s = 'IBAMA') THEN 'NOT ELIGIBLE - IBAMA'
-            WHEN EXISTS(SELECT 1 FROM UNNEST(v.embargo_sources) s WHERE s = 'SEMA_MT') THEN 'NOT ELIGIBLE - SEMA_MT'
-            WHEN EXISTS(SELECT 1 FROM UNNEST(v.embargo_sources) s WHERE s = 'SIGA_MT') THEN 'NOT ELIGIBLE - SIGA_MT'
-            WHEN EXISTS(SELECT 1 FROM UNNEST(v.embargo_sources) s WHERE s = 'ICMBIO') THEN 'NOT ELIGIBLE - ICMBIO'
-            WHEN v.embargo_area_ha > 0.1 AND (v.embargo_date >= v.forest_code_date OR v.embargo_date IS NULL) THEN 'NOT ELIGIBLE - EMBARGO'
+            WHEN v.forensic_ti_ha > 0.01 THEN 'NOT ELIGIBLE - INDIGENOUS LAND'
+            WHEN v.forensic_uc_ha > 0.01 THEN 'NOT ELIGIBLE - CONSERVATION UNIT'
+            WHEN v.forensic_quilombo_ha > 0.01 AND v.is_quilombo_identity IS FALSE THEN 'NOT ELIGIBLE - QUILOMBOLA (INVASION)'
+            WHEN v.forensic_settlement_ha > 0.01 AND v.is_settlement_identity IS FALSE THEN 'NOT ELIGIBLE - SETTLEMENT (INVASION)'
+            WHEN v.forensic_traditional_ha > 0.01 AND v.is_traditional_identity IS FALSE THEN 'NOT ELIGIBLE - TRADITIONAL TERRITORY (INVASION)'
+            WHEN v.forensic_app_hidrica_ha > 0.01 THEN 'NOT ELIGIBLE - APP DEFORESTATION (WATER)'
+            WHEN v.app_deforested_ha_forensic > 0.01 THEN 'NOT ELIGIBLE - APP DEFORESTATION'
+            WHEN v.eudr_deforested_ha > 0.01 THEN 'NOT ELIGIBLE - EUDR VIOLATION (POST-2020)'
+            WHEN v.mapbiomas_deforested_ha > LEAST(v.noise_threshold, 0.1) AND (v.mapbiomas_date >= v.forest_code_date OR v.mapbiomas_date IS NULL) 
+                 THEN 'NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)'
+            WHEN EXISTS(SELECT 1 FROM UNNEST(v.embargo_sources) s WHERE s IN ('IBAMA', 'SEMA_MT', 'SIGA_MT', 'ICMBIO')) 
+                 THEN 'NOT ELIGIBLE - EMBARGO (OFFICIAL SOURCE)'
+            WHEN v.embargo_area_ha > 0.1 AND (v.embargo_date >= v.forest_code_date OR v.embargo_date IS NULL) 
+                 THEN 'NOT ELIGIBLE - EMBARGO'
             WHEN v.max_slope_degrees > 45 THEN 'NOT ELIGIBLE - SATELLITE (SLOPE)'
-
-            -- FILTRO DE ESCOPO (Restaurando os 39% de propriedades não-ativas)
-            WHEN v.registration_status NOT IN ('ATIVO', 'PENDENTE') THEN 'MANUAL_REVIEW_REQUIRED - OUT OF SCOPE'
-
-            -- GRUPO 2: ALERTAS (WARNINGS & CONDITIONAL)
+            WHEN v.rl_deficit_ha > 0.01 AND v.is_small_holder IS FALSE THEN 'NOT ELIGIBLE - RL DEFICIT'
+            
+            WHEN (v.is_settlement_identity OR v.is_traditional_identity OR v.is_quilombo_identity) AND v.area_ha > 1000 
+                 THEN 'MANUAL_REVIEW_REQUIRED - UNUSUAL AREA FOR IDENTITY'
+            
+            WHEN v.is_quilombo_identity IS TRUE THEN 'ELIGIBLE - QUILOMBOLA PRODUCER'
+            WHEN v.is_settlement_identity IS TRUE THEN 'ELIGIBLE - SETTLEMENT PRODUCER'
+            WHEN v.is_traditional_identity IS TRUE THEN 'ELIGIBLE - TRADITIONAL PRODUCER'
+            
+            WHEN v.registration_status NOT IN ('ATIVO', 'PENDENTE', 'AT', 'PE') THEN 'MANUAL_REVIEW_REQUIRED - OUT OF SCOPE'
             WHEN c.neighbor_risks IS NOT NULL AND c.neighbor_risks != '' THEN 'WARNING - RISK BY ADJACENCY'
             WHEN v.slave_labor_match_confidence IS NOT NULL AND v.slave_labor_match_confidence != 'HIGH' THEN 'AWAITING_MANUAL_VALIDATION - POTENTIAL SOCIAL RISK'
             WHEN v.has_any_cancelled_embargo = TRUE THEN 'WARNING - EMBARGO CANCELLED/JUDICIAL'
-            WHEN v.embargo_area_ha > 0.1 AND v.embargo_date >= v.forest_code_date AND v.has_any_active_embargo = FALSE THEN 'WARNING - OLD EMBARGO'
-            WHEN v.mapbiomas_deforested_ha > v.noise_threshold AND v.mapbiomas_date < v.forest_code_date THEN 'WARNING - OLD EMBARGO (PRE-2008)'
             WHEN v.car_on_car_overlap_pct > 10 THEN 'WARNING - HIGH CAR OVERLAP'
-            WHEN v.max_slope_degrees BETWEEN 40 AND 45 THEN 'WARNING - BORDERLINE SLOPE'
-            WHEN v.rl_deficit_ha > 0.01 THEN 'CONDITIONAL - RL DEFICIT'
             
-            -- ELEGÍVEL (Default para ATIVO sem riscos)
+            WHEN v.rl_deficit_ha > 0.01 AND v.is_small_holder IS TRUE THEN 'CONDITIONAL - SMALL HOLDER RL REGULARIZATION'
+            
             ELSE 'ELIGIBLE'
         END as final_eligibility_status
     FROM final_analysis v
@@ -248,9 +272,12 @@ SELECT
     car_bbox,
     final_eligibility_status,
     is_technically_blocked,
+    is_missing_geometry,
 
     CASE 
-        WHEN protected_area_overlap_ha > 0 AND protected_area_overlap_ha <= noise_threshold THEN 'LOW_CONFIDENCE - VECTOR ERROR (PROTECTED AREA)'
+        WHEN protected_area_overlap_ha > 0 AND protected_area_overlap_ha <= noise_threshold 
+             AND is_settlement_identity IS FALSE AND is_traditional_identity IS FALSE AND is_quilombo_identity IS FALSE 
+             THEN 'LOW_CONFIDENCE - VECTOR ERROR (PROTECTED AREA)'
         WHEN embargo_area_ha > 0 AND embargo_area_ha <= 0.1 THEN 'LOW_CONFIDENCE - MICRO EMBARGO'
         WHEN mapbiomas_deforested_ha > 0 AND mapbiomas_deforested_ha <= noise_threshold THEN 'LOW_CONFIDENCE - MICRO DEFORESTATION'
         WHEN max_slope_degrees > 45 AND max_slope_degrees <= 46.5 THEN 'LOW_CONFIDENCE - SENSOR NOISE (SLOPE)'
@@ -275,37 +302,44 @@ SELECT
     latest_evidence_date as evidence_date_after,
     CASE WHEN eudr_deforested_ha > 0 THEN TRUE ELSE FALSE END as is_eudr_restricted,
 
-    protected_area_fixed_ha as protected_area_overlap_ha,
-    protected_area_fixed_ha as protected_overlap_ha,
-    is_protected_area_overlap,
+    CASE WHEN is_settlement_identity OR is_traditional_identity OR is_quilombo_identity THEN 0 ELSE protected_area_fixed_ha END as protected_area_overlap_ha,
+    CASE WHEN is_settlement_identity OR is_traditional_identity OR is_quilombo_identity THEN 0 ELSE protected_area_fixed_ha END as protected_overlap_ha,
+    CASE WHEN is_settlement_identity OR is_traditional_identity OR is_quilombo_identity THEN FALSE ELSE is_protected_area_overlap END as is_protected_area_overlap,
+    
     car_on_car_overlap_pct,
     CASE WHEN slave_labor_match_confidence IS NOT NULL THEN area_ha ELSE 0 END as slave_labor_overlap_ha,
 
     COALESCE(defo_fixed_ha * fine_defo, 0) as liability_deforestation_brl,
-    COALESCE(rl_deficit_ha * fine_rl, 0) as liability_rl_brl,
-    COALESCE(protected_area_fixed_ha * fine_protected, 0) as liability_protected_areas_brl,
+    
+    CASE WHEN is_small_holder THEN 0 ELSE COALESCE(rl_deficit_ha * fine_rl, 0) END as liability_rl_brl,
+
+    COALESCE(embargo_fixed_ha * fine_embargo, 0) as liability_embargo_brl,
+    
+    CASE WHEN is_settlement_identity OR is_traditional_identity OR is_quilombo_identity THEN 0 ELSE COALESCE(protected_area_fixed_ha * fine_protected, 0) END as liability_protected_areas_brl,
     CASE WHEN slave_labor_match_confidence IS NOT NULL THEN fine_slave ELSE 0 END as liability_social_brl,
     CASE WHEN app_deforested_ha_forensic > 0 THEN fine_app ELSE 0 END as liability_app_brl,
 
-    (COALESCE(defo_fixed_ha * fine_defo, 0) + 
-     COALESCE(rl_deficit_ha * fine_rl, 0) + 
-     COALESCE(protected_area_fixed_ha * fine_protected, 0) + 
-     CASE WHEN app_deforested_ha_forensic > 0 THEN fine_app ELSE 0 END +
-     CASE WHEN slave_labor_match_confidence IS NOT NULL THEN fine_slave ELSE 0 END) as estimated_financial_liability_brl,
+    (
+      COALESCE(defo_fixed_ha * fine_defo, 0) + 
+      (CASE WHEN is_small_holder THEN 0 ELSE COALESCE(rl_deficit_ha * fine_rl, 0) END) + 
+      (CASE WHEN is_settlement_identity OR is_traditional_identity OR is_quilombo_identity THEN 0 ELSE COALESCE(protected_area_fixed_ha * fine_protected, 0) END) + 
+      COALESCE(embargo_fixed_ha * fine_embargo, 0) + 
+      CASE WHEN app_deforested_ha_forensic > 0 THEN fine_app ELSE 0 END +
+      CASE WHEN slave_labor_match_confidence IS NOT NULL THEN fine_slave ELSE 0 END
+    ) as estimated_financial_liability_brl,
 
-    -- Evidências Técnicas
     ARRAY_TO_STRING(ARRAY(
         SELECT x FROM UNNEST([
             CASE WHEN slave_labor_match_confidence = 'HIGH' THEN 'SOCIAL_CRITICAL' END,
             CASE WHEN registration_status IN ('CANCELADO', 'SUSPENSO') THEN 'STATUS CAR IRREGULAR' END,
-            CASE WHEN forensic_ti_ha > 0 THEN 'ÁREA INDÍGENA' END,
-            CASE WHEN forensic_quilombo_ha > 0 THEN 'QUILOMBOLA' END,
-            CASE WHEN forensic_uc_ha > 0 THEN 'UNIDADE DE CONSERVAÇÃO' END,
-            CASE WHEN forensic_settlement_ha > 0 THEN 'ASSENTAMENTO' END,
-            CASE WHEN forensic_traditional_ha > 0 THEN 'TERRITÓRIO TRADICIONAL' END,
+            CASE WHEN forensic_ti_ha > 0 THEN CONCAT('TI ', COALESCE(ti_name, 'N/A')) END,
+            CASE WHEN forensic_quilombo_ha > 0 AND is_quilombo_identity IS FALSE THEN CONCAT('QUILOMBO ', COALESCE(quilombo_name, 'N/A')) END,
+            CASE WHEN forensic_uc_ha > 0 THEN CONCAT('UC ', COALESCE(uc_name, 'N/A')) END,
+            CASE WHEN forensic_settlement_ha > 0 AND is_settlement_identity IS FALSE THEN CONCAT('ASSENTAMENTO ', COALESCE(settlement_name, 'N/A')) END,
+            CASE WHEN forensic_traditional_ha > 0 AND is_traditional_identity IS FALSE THEN CONCAT('TERRITÓRIO ', COALESCE(traditional_name, 'N/A')) END,
             CASE WHEN (biome_name LIKE 'AMAZ%NIA' AND embargo_area_ha >= 0.001 AND (embargo_date >= forest_code_date OR embargo_date IS NULL)) THEN 'EMBARGO AMAZÔNIA (CMN 5.081)' END,
             CASE WHEN embargo_area_ha > 0.1 AND (embargo_date >= forest_code_date OR embargo_date IS NULL) THEN 'EMBARGO ATIVO' END,
-            CASE WHEN mapbiomas_deforested_ha > noise_threshold AND mapbiomas_date >= forest_code_date THEN 'MAPBIOMAS' END,
+            CASE WHEN mapbiomas_deforested_ha > noise_threshold AND (mapbiomas_date >= forest_code_date OR mapbiomas_date IS NULL) THEN 'MAPBIOMAS' END,
             CASE WHEN app_deforested_ha_forensic > 0 THEN 'DESMATAMENTO EM APP' END,
             CASE WHEN eudr_deforested_ha > 0 THEN 'RESTRIÇÃO EXPORTAÇÃO (EUDR)' END,
             CASE WHEN max_slope_degrees > 45 THEN 'DECLIVIDADE' END
@@ -313,10 +347,15 @@ SELECT
     ), ' | ') as internal_risks_found,
 
     adjacency_details,
+    
     CONCAT(
-        "⚠️ RESTRIÇÕES: ",
-        IF(final_eligibility_status LIKE 'NOT ELIGIBLE%', final_eligibility_status, "SEM BLOQUEIOS ATIVOS"),
-        IF(adjacency_details IS NOT NULL, CONCAT(" | 🏠 VIZINHO: ", adjacency_details), "")
+        IF(final_eligibility_status LIKE '%PRODUCER%', "✅ OPERAÇÃO LEGALIZADA: ", "⚠️ RESTRIÇÕES: "),
+        IF(final_eligibility_status LIKE 'NOT ELIGIBLE%' OR final_eligibility_status LIKE '%PRODUCER%', final_eligibility_status, "SEM BLOQUEIOS ATIVOS"),
+        IF(adjacency_details IS NOT NULL, CONCAT(" | 🏠 VIZINHO: ", adjacency_details), ""),
+        IF(is_settlement_identity, CONCAT(" | ✅ Assentado no PA: ", settlement_name), ""),
+        IF(is_quilombo_identity, CONCAT(" | ✅ Quilombola no Território: ", quilombo_name), ""),
+        IF(forensic_settlement_ha > 0 AND NOT is_settlement_identity, CONCAT(" | ⚠️ Invasão de Assentamento: ", settlement_name), ""),
+        IF(forensic_quilombo_ha > 0 AND NOT is_quilombo_identity, CONCAT(" | ⚠️ Invasão de Quilombo: ", quilombo_name), "")
     ) as technical_evidence,
     
     ARRAY_TO_STRING(ARRAY(
@@ -327,18 +366,30 @@ SELECT
         ]) AS x WHERE x IS NOT NULL
     ), ' | ') as historical_warnings,
 
-    mapbiomas_date as mapbiomas_detection_date,
-    COALESCE(embargo_date, CAST('1900-01-01' AS DATE)) as embargo_date,
+    COALESCE(mapbiomas_date, '1900-01-01') as mapbiomas_detection_date,
+    COALESCE(embargo_date, '1900-01-01') as embargo_date,
     slave_labor_inclusion_date,
     CURRENT_TIMESTAMP() as analyzed_at,
     last_update as processed_at,
     ST_Y(centroid) as latitude,
     ST_X(centroid) as longitude,
 
+    forensic_ti_ha,
+    forensic_quilombo_ha,
+    forensic_uc_ha,
+    forensic_settlement_ha,
+    forensic_traditional_ha,
+    is_settlement_identity,
+    is_traditional_identity,
+    is_quilombo_identity,
+
     max_slope_degrees,
     relief_classification,
     rl_status,
     rl_deficit_ha,
-    rl_balance_ha
+    rl_balance_ha,
+    producer_size_category,
+    is_small_holder,
+    fmp_ha
 
 FROM final_status_calc

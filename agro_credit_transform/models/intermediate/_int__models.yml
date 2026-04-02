@@ -25,6 +25,24 @@ models:
           - accepted_values:
               values: ['REGULAR', 'DEFICIT', 'SURPLUS', 'EXEMPT', 'PENDENTE', 'SUSPENSO']
 
+  - name: int_car_properties_classified
+    description: "Propriedades rurais classificadas por porte (Minifúndio, Pequena, Média e Grande) conforme o Código Florestal e índices do INCRA."
+    columns:
+      - name: property_id
+        description: "Chave primária do imóvel consolidada entre metadados e sobreposição."
+        data_tests:
+          - unique
+          - not_null
+      - name: producer_size_category
+        description: "Categoria legal baseada em Módulos Fiscais e Fração Mínima de Parcelamento (FMP)."
+        data_tests:
+          - accepted_values:
+              values: ['MINIFÚNDIO', 'PEQUENA PROPRIEDADE', 'MÉDIA PROPRIEDADE', 'GRANDE PROPRIEDADE', 'NÃO CLASSIFICADO']
+      - name: is_small_holder
+        description: "Flag booleana que identifica Minifúndios e Pequenas Propriedades (Agricultura Familiar)."
+        data_tests:
+          - not_null
+
   - name: int_car_grid_mapping
     description: "Mapeia as propriedades rurais num Grid espacial de ~11km."
     data_tests:
@@ -50,7 +68,6 @@ models:
       Filtra alertas do MapBiomas que cruzam com imóveis (CAR) respeitando o Marco Temporal (Pós-Julho/2008).
       Inclui inteligência de perícia bitemporal, classificação EUDR e dados para auditoria (Double Check).
     data_tests:
-      # Movido para nível de modelo para evitar erro de sintaxe no BigQuery
       - dbt_utils.expression_is_true:
           expression: "deforestation_overlap_ha > 0"
           name: "int_mapbiomas_deforestation_area_positive"
@@ -102,9 +119,6 @@ models:
                 - 'SOCIAL_RISK_SLAVE_LABOR'
                 - 'ENVIRONMENTAL_RISK_EMBARGO'
                 - 'ENVIRONMENTAL_RISK_DEFORESTATION'
-
-  # --- NOVOS MODELOS ADICIONADOS PARA BLINDAGEM CONTRA FAN-OUT SILENCIOSO ---
-
 
   - name: int_car_spatial_restrictions
     description: "Agregação de restrições espaciais (TIs, UCs, Quilombos, Assentamentos) cruzadas via GIS."

@@ -3,7 +3,7 @@
 -- 1. Pega os dados declarados
 WITH themes_pivoted AS (
     SELECT
-        property_id,
+        TRIM(property_id) as property_id,
         SUM(CASE WHEN theme_name = 'RESERVA_LEGAL_AVERBADA' THEN theme_area_ha ELSE 0 END) as rl_averbada_ha,
         SUM(CASE WHEN theme_name = 'RESERVA_LEGAL_PROPOSTA' THEN theme_area_ha ELSE 0 END) as rl_proposta_ha,
         SUM(CASE WHEN theme_name = 'APP' THEN theme_area_ha ELSE 0 END) as app_declared_ha,
@@ -16,12 +16,13 @@ WITH themes_pivoted AS (
 -- 2. Geometrias do Estado Específico
 properties AS (
     SELECT 
-        property_id, area_ha, geometry_raw as geometry,
+        TRIM(property_id) as property_id, 
+        area_ha, 
+        geometry_raw as geometry,
         ST_CENTROID(geometry_raw) as centroid,
-        ST_BOUNDINGBOX(geometry_raw) as bbox,
         ingested_at
     FROM {{ ref('int_car_geometries') }}
-    WHERE state = '{{ state_code }}'
+    WHERE UPPER(TRIM(state)) = UPPER(TRIM('{{ state_code }}'))
     {% if is_incremental() %}
         -- SÓ PROCESSA O QUE É NOVO: Velocidade máxima
         AND ingested_at > (SELECT MAX(ingested_at) FROM {{ this }})
@@ -34,16 +35,15 @@ biome_match AS (
         p.property_id,
         ref.restriction_name as biome_name,
         ref.legal_reserve_perc,
-        CASE 
-            WHEN ST_WITHIN(p.centroid, ref.geometry) THEN p.area_ha
-            ELSE ST_AREA(ST_INTERSECTION(p.geometry, ref.geometry)) / 10000 
-        END as intersection_area
+        -- Calcula a distância para todos e o QUALIFY seleciona o mais perto
+        ST_DISTANCE(p.centroid, ref.geometry) as dist_to_biome
     FROM properties p
-    INNER JOIN {{ ref('int_brazil_reference_geometries') }} ref
-        ON ref.restriction_type = 'BIOME'
-        AND p.bbox.xmin <= ref.bbox.xmax AND p.bbox.xmax >= ref.bbox.xmin 
-        AND p.bbox.ymin <= ref.bbox.ymax AND p.bbox.ymax >= ref.bbox.ymin
-    QUALIFY ROW_NUMBER() OVER(PARTITION BY p.property_id ORDER BY intersection_area DESC) = 1
+    CROSS JOIN {{ ref('int_brazil_reference_geometries') }} ref
+    WHERE ref.restriction_type = 'BIOME'
+    QUALIFY ROW_NUMBER() OVER(
+        PARTITION BY p.property_id 
+        ORDER BY dist_to_biome ASC
+    ) = 1
 )
 
 SELECT 

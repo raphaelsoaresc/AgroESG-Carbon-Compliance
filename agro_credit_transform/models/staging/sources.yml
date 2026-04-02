@@ -15,7 +15,6 @@ sources:
           - name: max_slope
             description: "Declividade máxima encontrada no polígono."
 
-
       - name: raw_ee_consolidated
         description: "Métricas consolidadas de satélite processadas via GEE."
 
@@ -132,6 +131,16 @@ sources:
             description: "ID do alerta correspondente."
 
       # --- TERRITÓRIOS PROTEGIDOS E REFERÊNCIA (ESTÁTICOS) ---
+      - name: incra_municipal_indices
+        description: "Índices básicos do INCRA por município (Módulo Fiscal e Fração Mínima de Parcelamento)."
+        columns:
+          - name: municipio_id
+            description: "Código IBGE de 7 dígitos do município."
+          - name: modulo_fiscal_ha
+            description: "Valor de 1 Módulo Fiscal em hectares para o município."
+          - name: fmp_ha
+            description: "Fração Mínima de Parcelamento (FMP) em hectares."
+
       - name: ibge_biomes
         description: "Malha digital de biomas brasileiros (Escala 1:250.000)."
         columns:

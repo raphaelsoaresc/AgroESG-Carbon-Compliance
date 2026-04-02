@@ -1,7 +1,3 @@
--- Garante que o Passivo Total é exatamente a soma das suas partes.
--- Se isso falhar, significa que adicionamos uma nova multa no código 
--- mas esquecemos de somar na coluna final.
-
 WITH liability_check AS (
     SELECT 
         property_id,
@@ -11,11 +7,13 @@ WITH liability_check AS (
             liability_rl_brl +
             liability_protected_areas_brl +
             liability_social_brl +
-            liability_app_brl
+            liability_app_brl +
+            liability_embargo_brl  -- <--- ADICIONADO AQUI
         ) as calculated_sum
     FROM {{ ref('fct_compliance_risk') }}
 )
 
 SELECT * 
 FROM liability_check
-WHERE estimated_financial_liability_brl != calculated_sum
+-- Usando ABS para evitar problemas de arredondamento de centavos em FLOAT64
+WHERE ABS(estimated_financial_liability_brl - calculated_sum) > 0.01

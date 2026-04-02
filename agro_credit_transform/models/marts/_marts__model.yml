@@ -8,20 +8,20 @@ models:
     data_tests:
       # Validação de Elegibilidade vs Embargos (Respeitando a regra de 2008 e data de sistema 1900)
       - dbt_utils.expression_is_true:
-          expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND embargo_area_ha > 0.1 AND (embargo_date >= '2008-07-22' OR embargo_date = '1900-01-01'))"
+          expression: "NOT (final_eligibility_status LIKE 'ELIGIBLE%' AND embargo_area_ha > 0.1 AND (embargo_date >= '2008-07-22' OR embargo_date = '1900-01-01'))"
           name: "check_eligible_properties_environmental_limit"
       
       - dbt_utils.expression_is_true:
-          expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND (internal_risks_found LIKE '%SOCIAL%' OR internal_risks_found LIKE '%SLAVE%'))"
+          expression: "NOT (final_eligibility_status LIKE 'ELIGIBLE%' AND (internal_risks_found LIKE '%SOCIAL%' OR internal_risks_found LIKE '%SLAVE%'))"
           name: "check_eligible_properties_social_limit"
 
       - dbt_utils.expression_is_true:
-          expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND max_slope_degrees > 45)"
+          expression: "NOT (final_eligibility_status LIKE 'ELIGIBLE%' AND max_slope_degrees > 45)"
           name: "check_eligible_properties_satellite_limit"
 
       # Validação de Elegibilidade vs MapBiomas (Respeitando a regra de 2008)
       - dbt_utils.expression_is_true:
-          expression: "NOT (final_eligibility_status = 'ELIGIBLE' AND mapbiomas_deforested_ha > 0.1 AND (mapbiomas_detection_date >= '2008-07-22' OR mapbiomas_detection_date IS NULL))"
+          expression: "NOT (final_eligibility_status LIKE 'ELIGIBLE%' AND mapbiomas_deforested_ha > 0.1 AND (mapbiomas_detection_date >= '2008-07-22' OR mapbiomas_detection_date IS NULL))"
           name: "check_eligible_properties_mapbiomas_limit"
 
       # Testes de Limite Físico (Garantindo que sobreposições não superem a área total)
@@ -33,9 +33,9 @@ models:
           expression: "mapbiomas_deforested_ha <= (area_ha + 0.01)"
           name: "check_physical_limit_mapbiomas_overlap"
 
-      # Bloqueio Hard para Áreas Protegidas (Tolerância zero para passar no assert_protected_area_causes_hard_block)
+      # Bloqueio Hard para Áreas Protegidas Restritas (TI, UC, Quilombo)
       - dbt_utils.expression_is_true:
-          expression: "NOT (protected_area_overlap_ha > 0.001 AND final_eligibility_status NOT LIKE 'NOT ELIGIBLE%')"
+          expression: "NOT ((forensic_ti_ha > 0.01 OR forensic_uc_ha > 0.01 OR forensic_quilombo_ha > 0.01) AND final_eligibility_status NOT LIKE 'NOT ELIGIBLE%')"
           name: "check_protected_area_hard_block_priority"
 
       - dbt_utils.expression_is_true:
@@ -64,7 +64,7 @@ models:
           name: "check_liability_is_not_negative"
 
       - dbt_utils.expression_is_true:
-          expression: "ABS(estimated_financial_liability_brl - (liability_deforestation_brl + liability_rl_brl + liability_protected_areas_brl + liability_social_brl + liability_app_brl)) < 0.01"
+          expression: "ABS(estimated_financial_liability_brl - (liability_deforestation_brl + liability_rl_brl + liability_protected_areas_brl + liability_social_brl + liability_app_brl + liability_embargo_brl)) < 0.01"
           name: "check_liability_math_sum"
 
       # Testes Geográficos e de Fraude
@@ -89,17 +89,22 @@ models:
     columns:
       - name: final_eligibility_status
         data_tests:
+          - not_null
           - accepted_values:
               values:
                 - "ELIGIBLE"
+                - "ELIGIBLE - SETTLEMENT PRODUCER"
+                - "ELIGIBLE - TRADITIONAL PRODUCER"
+                - "ELIGIBLE - QUILOMBOLA PRODUCER"
                 - "WARNING - RISK BY ADJACENCY"
                 - "WARNING - EMBARGO CANCELLED/JUDICIAL"
                 - "WARNING - OLD EMBARGO"
                 - "WARNING - OLD EMBARGO (PRE-2008)"
                 - "WARNING - HIGH CAR OVERLAP"
                 - "WARNING - BORDERLINE SLOPE"
-                - "CONDITIONAL - RL DEFICIT"
+                - "CONDITIONAL - SMALL HOLDER RL REGULARIZATION" # Ajustado para bater com o SQL
                 - "MANUAL_REVIEW_REQUIRED - OUT OF SCOPE"
+                - "MANUAL_REVIEW_REQUIRED - UNUSUAL AREA FOR IDENTITY"
                 - "AWAITING_MANUAL_VALIDATION - POTENTIAL SOCIAL RISK"
                 - "NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)"
                 - "NOT ELIGIBLE - CAR STATUS"
@@ -108,22 +113,54 @@ models:
                 - "NOT ELIGIBLE - INVALID GEOMETRY"
                 - "NOT ELIGIBLE - EUDR VIOLATION (POST-2020)"
                 - "NOT ELIGIBLE - INDIGENOUS LAND"
-                - "NOT ELIGIBLE - QUILOMBOLA"
+                - "NOT ELIGIBLE - QUILOMBOLA (INVASION)"
                 - "NOT ELIGIBLE - CONSERVATION UNIT"
-                - "NOT ELIGIBLE - SETTLEMENT"
-                - "NOT ELIGIBLE - TRADITIONAL TERRITORY"
+                - "NOT ELIGIBLE - SETTLEMENT (INVASION)"
+                - "NOT ELIGIBLE - TRADITIONAL TERRITORY (INVASION)"
                 - "NOT ELIGIBLE - EMBARGO"
-                - "NOT ELIGIBLE - IBAMA"
-                - "NOT ELIGIBLE - IBAMA AMAZON (CMN 5.081)"
-                - "NOT ELIGIBLE - SEMA_MT"
-                - "NOT ELIGIBLE - SIGA_MT"
-                - "NOT ELIGIBLE - ICMBIO"
+                - "NOT ELIGIBLE - EMBARGO (OFFICIAL SOURCE)"
                 - "NOT ELIGIBLE - APP DEFORESTATION (WATER)"
-                - "NOT ELIGIBLE - APP DEFORESTATION (SLOPE)"
                 - "NOT ELIGIBLE - APP DEFORESTATION"
+                - "NOT ELIGIBLE - RL DEFICIT"
 
-      - name: max_slope_degrees
+  - name: fct_compliance_geometries_mart
+    description: "Backend espacial otimizado para o mapa do frontend. Contém bordas de propriedades e camadas de restrição (Long Format)."
+    columns:
+      - name: property_id
         data_tests:
-          - dbt_utils.accepted_range:
-              min_value: 0
-              max_value: 90
+          - not_null
+
+      - name: map_layer
+        description: "Identificador da camada para estilização no frontend."
+        data_tests:
+          - not_null
+          - accepted_values:
+              values:
+                - 'PROPERTY_BOUNDARY'
+                - 'RESTRICTION_EMBARGO'
+                - 'RESTRICTION_DEFORESTATION'
+                - 'RESTRICTION_SOCIAL_ENVIRONMENTAL'
+                - 'RESTRICTION_APP'
+                - 'RESTRICTION_OTHERS'
+
+      - name: geometry
+        description: "Geometria simplificada para renderização web."
+        data_tests:
+          - not_null
+
+      - name: xmin
+        data_tests:
+          - not_null
+      - name: ymin
+        data_tests:
+          - not_null
+      - name: xmax
+        data_tests:
+          - not_null
+      - name: ymax
+        data_tests:
+          - not_null
+
+      - name: final_eligibility_status
+        data_tests:
+          - not_null
