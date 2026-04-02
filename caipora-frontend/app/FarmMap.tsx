@@ -1,100 +1,160 @@
-'use client';
-import { MapContainer, TileLayer, Polygon, Marker, Popup, useMap } from 'react-leaflet';
-import { useEffect } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+"use client";
 
-// 1. Fix para o ícone do Leaflet (essencial para Next.js)
-const icon = L.icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41]
-});
+import React, { useEffect } from "react";
+import { MapContainer, TileLayer, GeoJSON, useMap, LayersControl } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-// 2. Componente para ajustar o enquadramento e forçar o redesenho (evita o bug cinza)
-function MapController({ coords, data }: { coords: [number, number][], data: any }) {
+if (typeof window !== "undefined") {
+  // @ts-ignore
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
+    iconUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
+  });
+}
+
+interface FarmMapProps {
+  data: any;
+}
+
+// Função auxiliar para garantir que o dado seja um objeto GeoJSON válido
+const ensureIterable = (geo: any) => {
+  if (!geo) return null;
+  try {
+    return typeof geo === 'string' ? JSON.parse(geo) : geo;
+  } catch (e) {
+    return null;
+  }
+};
+
+const MapController = ({ data }: { data: any }) => {
   const map = useMap();
 
   useEffect(() => {
-    // Força o Leaflet a recalcular o tamanho do container assim que os dados chegam
-    // Isso resolve o problema do mapa carregar "cortado" ou cinza
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 100);
+    const geometry = ensureIterable(data?.geometry);
+    if (!map || !geometry) return;
 
-    if (coords && coords.length > 0) {
-      const bounds = L.latLngBounds(coords);
-      map.fitBounds(bounds, { padding: [50, 50], animate: true });
-    }
-  }, [coords, map, data]);
+    map.whenReady(() => {
+      try {
+        const geojsonLayer = L.geoJSON(geometry);
+        const bounds = geojsonLayer.getBounds();
+
+        if (bounds.isValid()) {
+          const timer = setTimeout(() => {
+            if (map.getContainer()) {
+              map.invalidateSize();
+              map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
+            }
+          }, 200);
+          return () => clearTimeout(timer);
+        }
+      } catch (err) {
+        console.error("Erro ao ajustar o mapa:", err);
+      }
+    });
+  }, [data, map]);
 
   return null;
-}
+};
 
-export default function FarmMap({ data }: { data: any }) {
-  if (!data || !data.mapCenterCoords) return null;
+const FarmMap = ({ data }: FarmMapProps) => {
+  if (!data) return <div className="h-full w-full flex items-center justify-center bg-gray-100">Aguardando dados...</div>;
 
-  // Define a cor do polígono baseada no status
-  const polyColor = data.color === 'red' ? '#ef4444' : data.color === 'orange' ? '#f97316' : '#22c55e';
+  // Geramos uma chave única baseada no ID do imóvel para forçar o React a redesenhar os polígonos
+  const mapKey = data.carNumber || "initial";
 
   return (
-    <div className="w-full h-full min-h-[350px] relative">
-      <MapContainer 
-        center={data.mapCenterCoords} 
-        zoom={data.mapZoom || 13} 
-        style={{ height: '100%', width: '100%', background: '#0f172a' }} // Fundo escuro enquanto carrega
+    <div className="h-full w-full relative" style={{ minHeight: "400px" }}>
+      <MapContainer
+        center={[data.latitude || -15, data.longitude || -50]}
+        zoom={4}
         scrollWheelZoom={true}
+        className="h-full w-full"
       >
-        {/* Camada 1: Satélite (Esri World Imagery) */}
-        <TileLayer
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-          attribution="&copy; Esri"
-        />
-
-        {/* Camada 2: Labels Híbridas (Nomes de cidades e estradas transparentes) */}
-        <TileLayer
-          url="https://stamen-tiles.a.ssl.fastly.net/toner-labels/{z}/{x}/{y}.png"
-          opacity={0.7}
-        />
-        
-        {/* Desenha o Polígono da Fazenda */}
-        {data.polygonCoords && data.polygonCoords.length > 0 && (
-          <>
-            <Polygon 
-              positions={data.polygonCoords} 
-              pathOptions={{ 
-                color: polyColor, 
-                fillColor: polyColor, 
-                fillOpacity: 0.3,
-                weight: 3,
-                dashArray: data.color === 'red' ? '5, 10' : '0' // Linha tracejada se for crítico
-              }} 
+        <LayersControl position="topright">
+          <LayersControl.BaseLayer checked name="Satélite">
+            <TileLayer
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+              attribution="Esri"
             />
-            <MapController coords={data.polygonCoords} data={data} />
-          </>
-        )}
+          </LayersControl.BaseLayer>
+          
+          <LayersControl.BaseLayer name="OpenStreetMap">
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{y}/{x}.png"
+              attribution="&copy; OSM"
+            />
+          </LayersControl.BaseLayer>
 
-        {/* Marcadores de Alerta (ex: Pontos de Desmatamento ou Sede) */}
-        {data.alerts?.map((alert: any, idx: number) => (
-          <Marker key={idx} position={alert.coords} icon={icon}>
-            <Popup>
-              <div className="font-sans">
-                <strong className={data.color === 'red' ? 'text-red-600' : 'text-green-600'}>
-                  {alert.label}
-                </strong>
-                <p className="text-xs text-slate-500 mt-1 font-mono">Coordenadas: {alert.coords[0].toFixed(4)}, {alert.coords[1].toFixed(4)}</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+          {/* Camada Principal: Limite do Imóvel */}
+          {data.geometry && (
+            <LayersControl.Overlay checked name="Limite do Imóvel (CAR)">
+              <GeoJSON 
+                key={`main-${mapKey}`}
+                data={ensureIterable(data.geometry)} 
+                style={{ color: "#3b82f6", weight: 3, fillOpacity: 0.1 }} 
+              />
+            </LayersControl.Overlay>
+          )}
+
+          {/* Camadas Adicionais com chaves únicas para atualização em tempo real */}
+          {data.geom_embargos && (
+            <LayersControl.Overlay name="Áreas Embargadas">
+              <GeoJSON 
+                key={`embargo-${mapKey}`}
+                data={ensureIterable(data.geom_embargos)} 
+                style={{ color: "#ef4444", weight: 2, fillColor: "#ef4444", fillOpacity: 0.5 }} 
+              />
+            </LayersControl.Overlay>
+          )}
+
+          {data.geom_desmatamento && (
+            <LayersControl.Overlay name="Desmatamento">
+              <GeoJSON 
+                key={`desmat-${mapKey}`}
+                data={ensureIterable(data.geom_desmatamento)} 
+                style={{ color: "#f97316", weight: 2, fillColor: "#f97316", fillOpacity: 0.5 }} 
+              />
+            </LayersControl.Overlay>
+          )}
+
+          {data.geom_areas_protegidas && (
+            <LayersControl.Overlay name="Áreas Protegidas">
+              <GeoJSON 
+                key={`prot-${mapKey}`}
+                data={ensureIterable(data.geom_areas_protegidas)} 
+                style={{ color: "#10b981", weight: 2, fillColor: "#10b981", fillOpacity: 0.4 }} 
+              />
+            </LayersControl.Overlay>
+          )}
+
+          {data.geom_conflito_app && (
+            <LayersControl.Overlay name="Conflito APP">
+              <GeoJSON 
+                key={`app-${mapKey}`}
+                data={ensureIterable(data.geom_conflito_app)} 
+                style={{ color: "#8b5cf6", weight: 2, fillColor: "#8b5cf6", fillOpacity: 0.4 }} 
+              />
+            </LayersControl.Overlay>
+          )}
+
+          {data.geom_assentamentos && (
+            <LayersControl.Overlay name="Assentamentos">
+              <GeoJSON 
+                key={`assent-${mapKey}`}
+                data={ensureIterable(data.geom_assentamentos)} 
+                style={{ color: "#facc15", weight: 2, fillColor: "#facc15", fillOpacity: 0.4 }} 
+              />
+            </LayersControl.Overlay>
+          )}
+        </LayersControl>
+
+        <MapController data={data} />
       </MapContainer>
-
-      {/* Overlay de "Mira" para dar aspecto de software militar/satélite */}
-      <div className="absolute inset-0 pointer-events-none border-[20px] border-white/5 z-[400]"></div>
-      <div className="absolute top-4 right-4 bg-slate-900/80 backdrop-blur-md text-[10px] text-white px-2 py-1 rounded border border-white/10 z-[400] font-mono">
-        LAT: {data.mapCenterCoords[0].toFixed(4)} | LNG: {data.mapCenterCoords[1].toFixed(4)}
-      </div>
     </div>
   );
-}
+};
+
+export default FarmMap;
