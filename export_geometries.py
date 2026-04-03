@@ -50,7 +50,7 @@ def export_to_gcs():
     
     # LISTA DE TABELAS PARA EXPORTAÇÃO
     targets = [
-        # {"id": "fct_compliance_geometries_mart", "file": "fct_compliance_geometries.parquet"},
+        {"id": "fct_compliance_geometries_mart", "file": "fct_compliance_geometries.parquet"},
         {"id": "fct_compliance_risk", "file": "fct_compliance_latest.parquet"}
     ]
 

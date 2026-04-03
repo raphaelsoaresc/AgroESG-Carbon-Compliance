@@ -15,12 +15,11 @@ from services.billing import get_current_user, check_user_permission, register_u
 
 router = APIRouter(tags=["Compliance"])
 
-TABLE_NAME = "compliance_data" 
-GEOMETRY_TABLE = "map_data"
+TABLE_NAME = "fct_compliance_latest" # Nome da tabela final do Mart
+GEOMETRY_TABLE = "fct_compliance_geometries" # Nome da tabela de geometrias
 
 def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceResponse:
     
-    # Funções auxiliares robustas
     def clean_num(val, default=0.0):
         if val is None or pd.isna(val) or str(val).lower() in ("none", "nan", "null"):
             return default
@@ -38,26 +37,14 @@ def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceRespon
         return str(val).strip()
 
     def parse_complex_field(field):
-        if field is None or pd.isna(field): 
-            return None
-        if isinstance(field, (dict, list)): 
-            return field
-        
+        if field is None or pd.isna(field): return None
+        if isinstance(field, (dict, list)): return field
         field_str = str(field).strip()
-        if not field_str:
-            return None
-
-        # 1. Tenta como JSON padrão (aspas duplas)
-        try: 
-            return json.loads(field_str)
+        if not field_str: return None
+        try: return json.loads(field_str)
         except:
-            # 2. Tenta como literal do Python (aspas simples, que é o seu caso)
-            try:
-                # ast.literal_eval é seguro e converte "{'a': 1}" em {'a': 1}
-                return ast.literal_eval(field_str)
-            except:
-                return field_str # Retorna a string se tudo falhar
-    # Mapeamento seguindo exatamente a ordem do seu esquema de tabela
+            try: return ast.literal_eval(field_str)
+            except: return field_str
 
     return ComplianceResponse(
         property_id=clean_str(row.get("property_id")),
@@ -68,7 +55,6 @@ def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceRespon
         uf_origem=clean_str(row.get("uf_origem"), "N/A"),
         car_status=clean_str(row.get("car_status"), "ATIVO"),
         
-        # Geometria e Localização
         geometry=parse_complex_field(row.get("geometry_json")),
         car_bbox=parse_complex_field(row.get("car_bbox")),
         latitude=clean_num(row.get("latitude")),
@@ -76,19 +62,16 @@ def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceRespon
         max_slope_degrees=clean_num(row.get("max_slope_degrees")),
         relief_classification=clean_str(row.get("relief_classification"), "N/A"),
         
-        # Status
         final_eligibility_status=clean_str(row.get("final_eligibility_status"), "UNKNOWN"),
         is_technically_blocked=clean_bool(row.get("is_technically_blocked")),
         geospatial_confidence_level=clean_str(row.get("geospatial_confidence_level"), "LOW"),
         
-        # Identidades
         is_settlement_identity=clean_bool(row.get("is_settlement_identity")),
         is_traditional_identity=clean_bool(row.get("is_traditional_identity")),
         is_quilombo_identity=clean_bool(row.get("is_quilombo_identity")),
         producer_size_category=clean_str(row.get("producer_size_category"), "N/A"),
         is_small_holder=clean_bool(row.get("is_small_holder")),
         
-        # Datas (Garantindo que não venham como NaT do Pandas)
         analyzed_at=None if pd.isna(row.get("analyzed_at")) else row.get("analyzed_at"),
         processed_at=None if pd.isna(row.get("processed_at")) else row.get("processed_at"),
         
@@ -116,17 +99,18 @@ def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceRespon
         deforestation_metrics=DeforestationMetrics(
             mapbiomas_deforested_ha=clean_num(row.get("mapbiomas_deforested_ha")),
             eudr_deforested_ha=clean_num(row.get("eudr_deforested_ha")),
-            deforestation_types=parse_complex_field(row.get("deforestation_types")), # Alterado para parse
-            official_reports_urls=parse_complex_field(row.get("official_reports_urls")), # Alterado para parse
+            deforestation_types=parse_complex_field(row.get("deforestation_types")),
+            official_reports_urls=parse_complex_field(row.get("official_reports_urls")),
             evidence_date_before=None if pd.isna(row.get("evidence_date_before")) else row.get("evidence_date_before"),
             evidence_date_after=None if pd.isna(row.get("evidence_date_after")) else row.get("evidence_date_after"),
-            mapbiomas_detection_date=None if pd.isna(row.get("mapbiomas_detection_date")) else row.get("mapbiomas_detection_date")
+            mapbiomas_detection_date=None if pd.isna(row.get("mapbiomas_detection_date")) else row.get("mapbiomas_detection_date"),
+            mapbiomas_alert_ids=clean_str(row.get("mapbiomas_alert_ids")),
+            official_alert_area_ha=clean_num(row.get("official_alert_area_ha"))
         ),
         
         social_score=SocialScore(
             is_protected_area_overlap=clean_bool(row.get("is_protected_area_overlap")),
             protected_area_overlap_ha=clean_num(row.get("protected_area_overlap_ha")),
-            protected_overlap_ha=clean_num(row.get("protected_overlap_ha")),
             slave_labor_overlap_ha=clean_num(row.get("slave_labor_overlap_ha")),
             slave_labor_inclusion_date=None if pd.isna(row.get("slave_labor_inclusion_date")) else row.get("slave_labor_inclusion_date"),
             forensic_ti_ha=clean_num(row.get("forensic_ti_ha")),
@@ -147,13 +131,14 @@ def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceRespon
             embargo_date=None if pd.isna(row.get("embargo_date")) else row.get("embargo_date"),
             internal_risks_found=clean_str(row.get("internal_risks_found")),
             adjacency_details=clean_str(row.get("adjacency_details")),
-            technical_evidence=clean_str(row.get("technical_evidence"))
+            technical_evidence=clean_str(row.get("technical_evidence")),
+            max_adjacency_score=clean_num(row.get("max_adjacency_score"))
         ),
 
-        # Geometrias Periciais (Vindas do JOIN)
         geom_car_total=parse_complex_field(row.get("geom_car_total")),
         geom_embargos=parse_complex_field(row.get("geom_embargos")),
         geom_desmatamento=parse_complex_field(row.get("geom_desmatamento")),
+        geom_eudr=parse_complex_field(row.get("geom_eudr")),
         geom_areas_protegidas=parse_complex_field(row.get("geom_areas_protegidas")),
         geom_assentamentos=parse_complex_field(row.get("geom_assentamentos")),
         geom_conflito_app=parse_complex_field(row.get("geom_conflito_app"))
@@ -167,6 +152,7 @@ def build_compliance_query(where_clause: str) -> str:
                 ANY_VALUE(CASE WHEN map_layer = 'PROPERTY_BOUNDARY' THEN ST_AsGeoJSON(geometry) END) AS geom_car_total,
                 ANY_VALUE(CASE WHEN map_layer = 'RESTRICTION_EMBARGO' THEN ST_AsGeoJSON(geometry) END) AS geom_embargos,
                 ANY_VALUE(CASE WHEN map_layer = 'RESTRICTION_DEFORESTATION' THEN ST_AsGeoJSON(geometry) END) AS geom_desmatamento,
+                ANY_VALUE(CASE WHEN map_layer = 'RESTRICTION_EUDR' THEN ST_AsGeoJSON(geometry) END) AS geom_eudr,
                 ANY_VALUE(CASE WHEN map_layer = 'RESTRICTION_SOCIAL_ENVIRONMENTAL' THEN ST_AsGeoJSON(geometry) END) AS geom_areas_protegidas,
                 ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN ST_AsGeoJSON(geometry) END) AS geom_assentamentos,
                 ANY_VALUE(CASE WHEN map_layer = 'RESTRICTION_APP' THEN ST_AsGeoJSON(geometry) END) AS geom_conflito_app
@@ -212,7 +198,6 @@ async def get_by_car(car_id: str, request: Request, user_email: Optional[str] = 
 async def get_by_polygon(payload: PolygonRequest, request: Request, user_email: Optional[str] = Depends(get_current_user)):
     db_con = request.app.state.db_con
     try:
-        # Lógica de query original mantida
         if payload.wkt:
             geom_query, param = "ST_GeomFromText(?)", payload.wkt
         elif payload.geojson:
@@ -228,7 +213,6 @@ async def get_by_polygon(payload: PolygonRequest, request: Request, user_email: 
             res = map_row_to_response(row.to_dict())
             car_id = res.property_id
             
-            # Aplica a trava individualmente para cada CAR do polígono
             if car_id in DEMO_IDS:
                 final_results.append(res)
             elif not user_email:
@@ -242,7 +226,7 @@ async def get_by_polygon(payload: PolygonRequest, request: Request, user_email: 
         return final_results
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro na geometria: {str(e)}")
-    
+
 @router.get("/compliance/list")
 async def list_properties(
     request: Request,
@@ -251,7 +235,7 @@ async def list_properties(
     uf: Optional[str] = None,
     city: Optional[str] = None,
     producer_type: Optional[str] = None,
-    confidence: Optional[str] = None, # NOVO
+    confidence: Optional[str] = None,
     limit: int = 12,
     offset: int = 0
 ):
@@ -259,21 +243,20 @@ async def list_properties(
     filters = ["1=1"]
     params = []
 
-    # Lógica de Cores (Mantida)
     if status == 'CONFORME_VERDE':
-        filters.append("final_eligibility_status LIKE 'ELIGIBLE%' AND geospatial_confidence_level NOT LIKE 'LOW%'")
+        filters.append("final_eligibility_status LIKE 'ELIGIBLE%'")
     elif status == 'REVISAO_AZUL':
-        filters.append("(final_eligibility_status LIKE 'MANUAL_REVIEW%' OR (final_eligibility_status LIKE 'ELIGIBLE%' AND geospatial_confidence_level LIKE 'LOW%'))")
+        filters.append("final_eligibility_status LIKE 'MANUAL_REVIEW%' OR final_eligibility_status LIKE 'AWAITING%'")
     elif status == 'BLOQUEADO_VERMELHO':
         filters.append("final_eligibility_status LIKE 'NOT ELIGIBLE%'")
     elif status == 'ALERTA_LARANJA':
-        filters.append("(final_eligibility_status LIKE 'WARNING%' OR final_eligibility_status LIKE 'CONDITIONAL%')")
+        filters.append("final_eligibility_status LIKE 'WARNING%' OR final_eligibility_status LIKE 'CONDITIONAL%'")
 
     if biome: filters.append("biome_name = ?"); params.append(biome)
     if uf: filters.append("uf_origem = ?"); params.append(uf.upper())
     if city: filters.append("city = ?"); params.append(city)
     if producer_type: filters.append("producer_size_category = ?"); params.append(producer_type)
-    if confidence: filters.append("geospatial_confidence_level = ?"); params.append(confidence) # NOVO
+    if confidence: filters.append("geospatial_confidence_level = ?"); params.append(confidence)
 
     where_clause = " AND ".join(filters)
     
@@ -295,7 +278,6 @@ async def list_properties(
         "total": int(total_count)
     }
 
-
 @router.get("/compliance/filter-options")
 async def get_filter_options(
     request: Request, 
@@ -308,7 +290,6 @@ async def get_filter_options(
 ):
     db_con = request.app.state.db_con
     
-    # Mapeamento dos filtros atuais
     active_filters = {
         "biome_name": biome,
         "uf_origem": uf,
@@ -319,8 +300,6 @@ async def get_filter_options(
     }
 
     def get_distinct_options(target_column):
-        # Para calcular as opções de "Bioma", ignoramos o filtro de "Bioma" 
-        # mas respeitamos UF, Cidade, etc. Isso permite trocar de Bioma facilmente.
         filters = ["1=1"]
         params = []
         
