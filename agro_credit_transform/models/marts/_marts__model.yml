@@ -97,6 +97,7 @@ models:
                 - "ELIGIBLE - TRADITIONAL PRODUCER"
                 - "ELIGIBLE - QUILOMBOLA PRODUCER"
                 - "WARNING - RISK BY ADJACENCY"
+                - 'WARNING - CRITICAL ADJACENCY RISK'
                 - "WARNING - EMBARGO CANCELLED/JUDICIAL"
                 - "WARNING - OLD EMBARGO"
                 - "WARNING - OLD EMBARGO (PRE-2008)"
@@ -106,6 +107,7 @@ models:
                 - "MANUAL_REVIEW_REQUIRED - OUT OF SCOPE"
                 - "MANUAL_REVIEW_REQUIRED - UNUSUAL AREA FOR IDENTITY"
                 - "AWAITING_MANUAL_VALIDATION - POTENTIAL SOCIAL RISK"
+                - "NOT ELIGIBLE - AMZ EMBARGO (CMN 5.081)"
                 - "NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)"
                 - "NOT ELIGIBLE - CAR STATUS"
                 - "NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)"
