@@ -5,7 +5,6 @@
 ) }}
 
 WITH source_data AS (
-    -- Mudamos a fonte pois a tabela 'metadados' continha apenas dicionário de dados
     SELECT * FROM {{ source('raw_data', 'car_temas_ambientais') }}
 ),
 
@@ -13,7 +12,7 @@ renamed_and_filtered AS (
     SELECT
         registro_car as property_id,
         
-        -- Registration Dates
+        -- Registration Dates (Mantendo sua lógica original)
         COALESCE(
             SAFE.PARSE_DATE('%d/%m/%Y', LEFT(TRIM(CAST(data_inscricao AS STRING)), 10)),
             SAFE.PARSE_DATE('%Y-%m-%d', LEFT(TRIM(CAST(data_inscricao AS STRING)), 10))
@@ -32,6 +31,30 @@ renamed_and_filtered AS (
         situacao_cadastro as registration_status,
         condicao_cadastro as registration_condition,
         
+        -- Colunas de Localização e Atributos
+        uf,
+        municipio,
+        codigo_ibge,
+        tipo_imovel_rural,
+        solicitacao_adesao_pra,
+        source_filename,
+        SAFE_CAST(latitude AS FLOAT64) as latitude,
+        SAFE_CAST(longitude AS FLOAT64) as longitude,
+        SAFE_CAST(modulos_fiscais AS FLOAT64) as modulos_fiscais,
+
+        -- APLICAÇÃO DA TRAVA DE SANIDADE (m² para ha)
+        CASE 
+            WHEN SAFE_CAST(area_do_imovel AS FLOAT64) > 10000
+            THEN SAFE_CAST(area_do_imovel AS FLOAT64) / 10000
+            ELSE SAFE_CAST(area_do_imovel AS FLOAT64)
+        END as area_do_imovel,
+
+        CASE 
+            WHEN SAFE_CAST(area_liquida AS FLOAT64) > 10000
+            THEN SAFE_CAST(area_liquida AS FLOAT64) / 10000
+            ELSE SAFE_CAST(area_liquida AS FLOAT64)
+        END as area_liquida,
+
         file_hash,
         ingested_at
 

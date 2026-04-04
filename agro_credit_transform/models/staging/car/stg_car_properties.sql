@@ -5,7 +5,6 @@
 ) }}
 
 WITH source_data AS (
-    -- Unindo as 4 tabelas geradas pela DAG
     SELECT * FROM {{ source('raw_data', 'car_area_imovel_geometria_pa') }}
     UNION ALL
     SELECT * FROM {{ source('raw_data', 'car_area_imovel_geometria_mt') }}
@@ -20,19 +19,33 @@ renamed_and_filtered AS (
         -- Identifiers
         cod_imovel as property_id,
         
-        -- Property Data (Com Trava de Sanidade para Hectares vs Metros Quadrados)
+        -- AJUSTE DA TRAVA DE SANIDADE: Limite baixado de 500k para 10k para capturar pequenas posses em m²
         CASE 
-            -- Se a área for maior que 500.000 (maior que a maior fazenda do BR), 
-            -- assumimos que o produtor digitou em m² e dividimos por 10.000 para converter em ha.
-            WHEN SAFE_CAST(num_area AS FLOAT64) > 500000 THEN SAFE_CAST(num_area AS FLOAT64) / 10000
+            WHEN SAFE_CAST(num_area AS FLOAT64) > 10000 THEN SAFE_CAST(num_area AS FLOAT64) / 10000
             ELSE SAFE_CAST(num_area AS FLOAT64)
         END as area_ha,
 
         SAFE_CAST(mod_fiscal AS FLOAT64) as fiscal_modules,
         
-        ind_status as status_code, 
-        des_condic as condition_desc, 
-        ind_tipo as property_type,
+        -- PADRONIZAÇÃO DE STATUS
+        CASE 
+            WHEN UPPER(TRIM(ind_status)) IN ('AT', 'ATIVO') THEN 'ATIVO'
+            WHEN UPPER(TRIM(ind_status)) IN ('PE', 'PENDENTE') THEN 'PENDENTE'
+            WHEN UPPER(TRIM(ind_status)) IN ('SU', 'SUSPENSO') THEN 'SUSPENSO'
+            WHEN UPPER(TRIM(ind_status)) IN ('CA', 'CANCELADO') THEN 'CANCELADO'
+            ELSE UPPER(TRIM(ind_status))
+        END as status_code,
+
+        des_condic as condition_desc, -- COLUNA RESTAURADA AQUI
+
+        -- PADRONIZAÇÃO DE TIPO (Para bater com stg_car_owners e lógica de identidade)
+        CASE 
+            WHEN UPPER(TRIM(ind_tipo)) IN ('IRU', 'IMÓVEL RURAL') THEN 'IRU'
+            WHEN UPPER(TRIM(ind_tipo)) IN ('AST', 'ASSENTAMENTO') THEN 'AST'
+            WHEN UPPER(TRIM(ind_tipo)) IN ('PCT', 'POVOS TRADICIONAIS') THEN 'PCT'
+            WHEN UPPER(TRIM(ind_tipo)) IN ('TI', 'TERRA INDÍGENA') THEN 'TI'
+            ELSE UPPER(TRIM(ind_tipo))
+        END as property_type,
         
         -- Location
         municipio as city,
