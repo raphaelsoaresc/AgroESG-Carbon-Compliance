@@ -66,6 +66,7 @@ def load_data():
             
             print(f"✅ [DuckDB] Criando tabela {table['name']}...")
             db_con.execute(f"CREATE OR REPLACE TABLE {table['name']} AS SELECT * FROM read_parquet('{table['local']}')")
+            os.remove(table["local"])
             
             count = db_con.execute(f"SELECT count(*) FROM {table['name']}").fetchone()[0]
             print(f"✨ Tabela {table['name']} pronta com {count} registros.")
@@ -82,22 +83,24 @@ async def lifespan(app: FastAPI):
     print("🚀 Iniciando Caipora Sentinela...")
     
     # 1. Conecta ao DuckDB
-    db_con = duckdb.connect(database=':memory:') 
+    db_con = duckdb.connect(database=':memory:')
     
     # 2. Configura Espacial
     os.makedirs('/tmp/duckdb_extensions', exist_ok=True)
     db_con.execute("SET extension_directory='/tmp/duckdb_extensions';")
-    db_con.execute("INSTALL spatial; LOAD spatial;")
     
-    # 3. CARGA OBRIGATÓRIA (BLOQUEANTE)
-    # A API só vai terminar de subir quando os dados estiverem no DuckDB
-    success = load_data()
-    if not success:
-        print("⚠️ AVISO: A carga inicial falhou. A API pode retornar erros 500.")
+    # --- ADICIONE ESTAS DUAS LINHAS ABAIXO ---
+    db_con.execute("INSTALL spatial;")
+    db_con.execute("LOAD spatial;")
+    # -----------------------------------------
     
     app.state.db_con = db_con
+
+    import asyncio
+    asyncio.create_task(asyncio.to_thread(load_data))
     
     yield
+    
     if db_con:
         db_con.close()
 
