@@ -19,8 +19,6 @@ export default function PlanosPage() {
       const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
       const apiKey = process.env.NEXT_PUBLIC_API_KEY;
 
-      console.log("Chamando assinatura para:", `${apiUrl}/payments/create-subscription`);
-
       const response = await fetch(`${apiUrl}/payments/create-subscription`, {
         method: "POST",
         headers: { 
@@ -33,23 +31,16 @@ export default function PlanosPage() {
       const result = await response.json();
 
       if (response.ok && result.init_point) {
-        // Sucesso: Redireciona para o checkout do Mercado Pago
         window.location.href = result.init_point;
       } else {
-        console.error("Erro detalhado do servidor:", result);
-        
-        // Extrai a mensagem de erro de forma segura
         const errorMsg = result.detail?.message || result.message || JSON.stringify(result.detail || result);
-        
-        // Verifica se é o erro de limite do Mercado Pago
         if (typeof errorMsg === 'string' && errorMsg.includes("greater than R$ 4000")) {
-          alert("⚠️ O Mercado Pago bloqueou a transação pois o valor excede o limite atual da conta. Verifique o valor no backend.");
+          alert("⚠️ Limite de transação excedido no Mercado Pago. Entre em contato para faturamento direto.");
         } else {
           alert(`❌ Erro ao gerar pagamento: ${errorMsg}`);
         }
       }
     } catch (error) {
-      console.error("Erro na requisição:", error);
       alert("Falha crítica de conexão. Verifique se a API está online.");
     } finally {
       setLoading(false);
@@ -58,72 +49,87 @@ export default function PlanosPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col">
-      <Header carId="" setCarId={() => {}} onSearch={() => {}} searchCount={0} />
+      {/* Header com correção de tipos TS */}
+      <Header 
+        carId="" 
+        setCarId={() => {}} 
+        onSearch={() => {}} 
+        searchCount={0} 
+        isAdmin={false} 
+        logout={() => {}} 
+      />
       
       <main className="max-w-6xl mx-auto px-6 mt-12 pb-20 relative z-10 flex-grow w-full">
         
         <div className="text-center mb-16 space-y-4">
-          <h1 className="text-5xl font-black text-slate-900 tracking-tight">Escolha seu Plano</h1>
-          <p className="text-xl text-slate-500 max-w-2xl mx-auto">
-            Auditoria geoespacial avançada para o agronegócio.
+          <h1 className="text-5xl font-black text-slate-900 tracking-tight uppercase">Escolha seu Plano</h1>
+          <p className="text-xl text-slate-500 max-w-2xl mx-auto font-medium">
+            Auditoria geoespacial avançada com 24 camadas de dados integradas.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch max-w-5xl mx-auto">
           
-          {/* CARD FREE */}
+          {/* CARD FREE - LAYOUT ORIGINAL */}
           <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-200 flex flex-col">
-            <h2 className="text-4xl font-black text-slate-900 mb-2">Plano Free</h2>
-            <p className="text-slate-500 mb-8 text-lg">Ideal para consultas esporádicas e testes rápidos.</p>
+            <h2 className="text-4xl font-black text-slate-900 mb-2 uppercase">Plano Free</h2>
+            <p className="text-slate-500 mb-8 text-lg font-medium">Ideal para consultas esporádicas e testes rápidos.</p>
             
-            <div className="text-5xl font-black text-slate-900 mb-8">R$ 0<span className="text-sm text-slate-400 ml-2 font-normal">/mês</span></div>
+            <div className="text-5xl font-black text-slate-900 mb-8 tracking-tighter">R$ 0<span className="text-sm text-slate-400 ml-2 font-normal uppercase tracking-widest">/mês</span></div>
             
-            <ul className="space-y-4 mb-8 flex-grow text-slate-600 font-medium">
+            <ul className="space-y-4 mb-8 flex-grow text-slate-600 font-bold">
+              <li className="flex items-center gap-3 font-bold text-slate-700">
+                  <span className="text-green-500 text-xl">✓</span> Acesso ao Catálogo Sentinela
+                </li>
               <li className="flex items-center gap-3">
-                <span className="text-green-500">✓</span> 3 consultas gratuitas
+                <span className="text-green-500 text-xl">✓</span> 3 auditorias detalhadas/mês
               </li>
               <li className="flex items-center gap-3">
-                <span className="text-green-500">✓</span> Veredito básico (Elegível/Não Elegível)
-              </li>
-              <li className="flex items-center gap-3 text-slate-400">
-                <span className="text-slate-300">✕</span> Sem indicadores EUDR/CMN 5.081
-              </li>
-              <li className="flex items-center gap-3 text-slate-400">
-                <span className="text-slate-300">✕</span> Sem visualização de mapas e NDVI
+                <span className="text-green-500 text-xl">✓</span> Veredito de Elegibilidade
               </li>
             </ul>
 
             <button 
               disabled
-              className="w-full bg-slate-100 text-slate-400 font-black py-6 rounded-2xl text-xl uppercase tracking-tight cursor-not-allowed"
+              className="w-full bg-slate-100 text-slate-400 font-black py-6 rounded-2xl text-xl uppercase tracking-widest cursor-not-allowed"
             >
               Plano Atual
             </button>
           </div>
 
-          {/* CARD PRO */}
+          {/* CARD PRO - LAYOUT ORIGINAL COM CONTEÚDO NOVO */}
           <div className="bg-slate-900 p-10 rounded-[3rem] shadow-2xl border-4 border-green-500 flex flex-col relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-green-500 text-slate-900 font-black px-8 py-2 rounded-bl-3xl uppercase text-xs tracking-widest">Recomendado</div>
             
-            <h2 className="text-4xl font-black text-white mb-2">Plano PRO</h2>
-            <p className="text-slate-300 mb-8 text-lg">
-              Foco em tradings médias, departamentos de compliance e gestores de risco agrícola.
+            <h2 className="text-4xl font-black text-white mb-2 uppercase">Plano PRO</h2>
+            <p className="text-slate-300 mb-8 text-lg font-medium">
+              Foco em tradings, compliance e gestores de risco agrícola.
             </p>
             
-            <div className="text-5xl font-black text-white tracking-tighter mb-8">R$ 4.000<span className="text-sm text-slate-400 ml-2 font-normal">/mês</span></div>
+            <div className="text-5xl font-black text-white tracking-tighter mb-4">R$ 4.000<span className="text-sm text-slate-400 ml-2 font-normal uppercase tracking-widest">/mês</span></div>
 
-            <ul className="space-y-4 mb-8 flex-grow text-slate-300 font-medium">
+            {/* DESTAQUE ART */}
+            <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-2xl mb-6">
+              <p className="text-green-400 font-black text-xs uppercase tracking-tighter">
+                ⭐ BÔNUS: 3 Créditos de Laudo ART/mês inclusos
+              </p>
+            </div>
+
+            <ul className="space-y-4 mb-8 flex-grow text-slate-300 font-bold">
               <li className="flex items-center gap-3">
-                <span className="text-green-400">✓</span> Franquia de 50 consultas/mês
+                <span className="text-green-400 text-xl">✓</span> 50 Auditorias Automatizadas/mês
               </li>
               <li className="flex items-center gap-3">
-                <span className="text-green-400">✓</span> Indicadores EUDR e CMN 5.081
+                <span className="text-green-400 text-xl">✓</span> Indicadores EUDR e CMN 5.081
               </li>
               <li className="flex items-center gap-3">
-                <span className="text-green-400">✓</span> Visualização de mapas e NDVI
+                <span className="text-green-400 text-xl">✓</span> Mapas GIS e Recortes Forenses
               </li>
               <li className="flex items-center gap-3">
-                <span className="text-green-400">✓</span> Monitoramento ativo e gestão de risco visual
+                <span className="text-green-400 text-xl">✓</span> Mitigação de Adjacência (ANA)
+              </li>
+              <li className="flex items-center gap-3 text-green-400">
+                <span className="text-green-400 text-xl">✓</span> 3 Laudos Periciais assinados (CREA)
               </li>
             </ul>
 
@@ -133,13 +139,13 @@ export default function PlanosPage() {
                 placeholder="Seu melhor e-mail corporativo" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-6 py-4 rounded-2xl bg-slate-800 border border-slate-700 text-white placeholder-slate-400 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all"
+                className="w-full px-6 py-4 rounded-2xl bg-slate-800 border border-slate-700 text-white placeholder-slate-400 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all font-bold"
               />
               
               <button 
                 onClick={handleSubscribe}
                 disabled={loading}
-                className="w-full bg-green-500 hover:bg-green-400 text-slate-900 font-black py-6 rounded-2xl transition-all active:scale-95 text-xl uppercase tracking-tight disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                className="w-full bg-green-500 hover:bg-green-400 text-slate-900 font-black py-6 rounded-2xl transition-all active:scale-95 text-xl uppercase tracking-widest disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2"
               >
                 {loading ? (
                   <>
@@ -153,6 +159,14 @@ export default function PlanosPage() {
             </div>
           </div>
 
+        </div>
+
+        {/* NOTA SOBRE LAUDOS ART ADICIONAIS */}
+        <div className="mt-16 text-center space-y-2">
+          <p className="text-slate-500 font-bold uppercase text-xs tracking-[0.2em]">Serviço Pericial sob demanda</p>
+          <p className="text-slate-400 max-w-xl mx-auto text-sm">
+            Laudos periciais avulsos com ART (Resolução 313/86) são entregues em até 7 dias úteis após a solicitação.
+          </p>
         </div>
       </main>
       
