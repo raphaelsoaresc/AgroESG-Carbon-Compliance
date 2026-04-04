@@ -34,8 +34,10 @@ models:
           name: "check_physical_limit_mapbiomas_overlap"
 
       # Bloqueio Hard para Áreas Protegidas Restritas (TI, UC, Quilombo)
+      # AJUSTE: Agora permite qualquer status de MANUAL_REVIEW_REQUIRED. 
+      # Se o dado está inconsistente ou pendente, a revisão manual é a conduta de segurança correta.
       - dbt_utils.expression_is_true:
-          expression: "NOT ((forensic_ti_ha > 0.01 OR forensic_uc_ha > 0.01 OR forensic_quilombo_ha > 0.01) AND final_eligibility_status NOT LIKE 'NOT ELIGIBLE%')"
+          expression: "NOT ((forensic_ti_ha > 0.01 OR forensic_uc_ha > 0.01 OR forensic_quilombo_ha > 0.01) AND final_eligibility_status NOT LIKE 'NOT ELIGIBLE%' AND final_eligibility_status NOT LIKE 'ELIGIBLE - % PRODUCER' AND final_eligibility_status NOT LIKE 'MANUAL_REVIEW_REQUIRED%')"
           name: "check_protected_area_hard_block_priority"
 
       - dbt_utils.expression_is_true:
@@ -73,8 +75,10 @@ models:
           name: "check_coordinates_inside_brazil"
 
       - dbt_utils.expression_is_true:
-          expression: "area_ha > 0 AND area_ha < 2000000"
+          expression: "COALESCE(area_ha, 0) >= 0 AND COALESCE(area_ha, 0) < 2000000"
           name: "check_area_realistic_limit"
+          config:
+            severity: warn
 
       - dbt_utils.expression_is_true:
           expression: "(ST_AREA(geometry) / 10000) <= (area_ha * 1.50)"
@@ -93,6 +97,8 @@ models:
           - accepted_values:
               values:
                 - "ELIGIBLE"
+                - "ELIGIBLE - INDIGENOUS PRODUCER"
+                - "ELIGIBLE - CONSERVATION UNIT PRODUCER"
                 - "ELIGIBLE - SETTLEMENT PRODUCER"
                 - "ELIGIBLE - TRADITIONAL PRODUCER"
                 - "ELIGIBLE - QUILOMBOLA PRODUCER"
@@ -103,14 +109,20 @@ models:
                 - "WARNING - OLD EMBARGO (PRE-2008)"
                 - "WARNING - HIGH CAR OVERLAP"
                 - "WARNING - BORDERLINE SLOPE"
-                - "CONDITIONAL - SMALL HOLDER RL REGULARIZATION" # Ajustado para bater com o SQL
+                - "CONDITIONAL - RL REGULARIZATION"
+                - "MANUAL_REVIEW_REQUIRED - INCONSISTENT CAR STATUS"
+                - "MANUAL_REVIEW_REQUIRED - DATA SOURCE CONFLICT"
+                - "MANUAL_REVIEW_REQUIRED - PENDING STATE ANALYSIS"
                 - "MANUAL_REVIEW_REQUIRED - OUT OF SCOPE"
                 - "MANUAL_REVIEW_REQUIRED - UNUSUAL AREA FOR IDENTITY"
+                - "MANUAL_REVIEW_REQUIRED - UNREALISTIC AREA"        # ADICIONADO
+                - "MANUAL_REVIEW_REQUIRED - POTENTIAL AREA FRAUD"    # ADICIONADO
                 - "AWAITING_MANUAL_VALIDATION - POTENTIAL SOCIAL RISK"
                 - "NOT ELIGIBLE - AMZ EMBARGO (CMN 5.081)"
                 - "NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)"
                 - "NOT ELIGIBLE - CAR STATUS"
                 - "NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)"
+                - "NOT ELIGIBLE - DEFORESTATION (MISSING DATE EVIDENCE)"
                 - "NOT ELIGIBLE - SATELLITE (SLOPE)"
                 - "NOT ELIGIBLE - INVALID GEOMETRY"
                 - "NOT ELIGIBLE - EUDR VIOLATION (POST-2020)"

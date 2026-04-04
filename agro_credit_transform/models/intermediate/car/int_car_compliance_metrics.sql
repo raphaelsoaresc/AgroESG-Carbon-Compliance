@@ -1,54 +1,68 @@
 {{ config(
     materialized='table',
     schema='agro_esg_intermediate',
-    cluster_by=['property_id']
+    cluster_by=['property_id'],
+    tags=['car']
 ) }}
 
 WITH unioned AS (
     SELECT 
-        property_id, total_area_ha, biome_name, total_rl_declared_ha, 
-        total_app_declared_ha, total_native_veg_ha, legal_reserve_perc, 
-        required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
+        property_id, 
+        uf, 
+        municipio, 
+        registration_status, 
+        registration_condition, 
+        property_type, 
+        solicitacao_adesao_pra,
+        total_area_ha, 
+        area_liquida_ha,
+        biome_name, 
+        total_rl_declared_ha, 
+        total_app_declared_ha, 
+        total_native_veg_ha, 
+        area_rural_consolidada_ha,
+        area_pousio_ha,
+        area_uso_restrito_ha,
+        legal_reserve_perc, 
+        required_rl_ha, 
+        rl_balance_ha, 
+        rl_deficit_ha, 
+        rl_status, 
+        ingested_at
     FROM {{ ref('int_car_compliance_mt') }}
     
     UNION ALL
     
     SELECT 
-        property_id, total_area_ha, biome_name, total_rl_declared_ha, 
-        total_app_declared_ha, total_native_veg_ha, legal_reserve_perc, 
-        required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
+        property_id, uf, municipio, registration_status, registration_condition, 
+        property_type, solicitacao_adesao_pra, total_area_ha, area_liquida_ha, 
+        biome_name, total_rl_declared_ha, total_app_declared_ha, total_native_veg_ha, 
+        area_rural_consolidada_ha, area_pousio_ha, area_uso_restrito_ha,
+        legal_reserve_perc, required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
     FROM {{ ref('int_car_compliance_pa') }}
     
     UNION ALL
     
     SELECT 
-        property_id, total_area_ha, biome_name, total_rl_declared_ha, 
-        total_app_declared_ha, total_native_veg_ha, legal_reserve_perc, 
-        required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
+        property_id, uf, municipio, registration_status, registration_condition, 
+        property_type, solicitacao_adesao_pra, total_area_ha, area_liquida_ha, 
+        biome_name, total_rl_declared_ha, total_app_declared_ha, total_native_veg_ha, 
+        area_rural_consolidada_ha, area_pousio_ha, area_uso_restrito_ha,
+        legal_reserve_perc, required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
     FROM {{ ref('int_car_compliance_ro') }}
-
 
     UNION ALL
     
     SELECT 
-        property_id, total_area_ha, biome_name, total_rl_declared_ha, 
-        total_app_declared_ha, total_native_veg_ha, legal_reserve_perc, 
-        required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
+        property_id, uf, municipio, registration_status, registration_condition, 
+        property_type, solicitacao_adesao_pra, total_area_ha, area_liquida_ha, 
+        biome_name, total_rl_declared_ha, total_app_declared_ha, total_native_veg_ha, 
+        area_rural_consolidada_ha, area_pousio_ha, area_uso_restrito_ha,
+        legal_reserve_perc, required_rl_ha, rl_balance_ha, rl_deficit_ha, rl_status, ingested_at
     FROM {{ ref('int_car_compliance_am') }}
 )
 
 SELECT 
-    property_id,
-    total_area_ha,
-    biome_name,
-    total_rl_declared_ha,
-    total_app_declared_ha,
-    total_native_veg_ha,
-    legal_reserve_perc,
-    required_rl_ha,
-    rl_balance_ha,
-    rl_deficit_ha,
-    rl_status,
-    ingested_at,
+    *,
     CURRENT_TIMESTAMP() as consolidated_at
 FROM unioned

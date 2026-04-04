@@ -1,4 +1,3 @@
--- models/intermediate/int_compliance__property_analysis.sql
 {{ config(
     materialized='table',
     cluster_by=['property_id', 'uf_origem']
@@ -18,20 +17,46 @@ WITH legal_params AS (
     FROM {{ ref('legal_parameters') }}
 ),
 
+-- CTE para garantir que cada property_id seja ÚNICO e com o status mais restritivo
+p_meta_dedup AS (
+    SELECT * FROM (
+        SELECT 
+            *,
+            ROW_NUMBER() OVER (
+                PARTITION BY UPPER(TRIM(property_id)) 
+                ORDER BY CASE 
+                    WHEN UPPER(TRIM(status_code)) IN ('CA', 'CANCELADO', 'C') THEN 1 
+                    WHEN UPPER(TRIM(status_code)) IN ('SU', 'SUSPENSO', 'S') THEN 2
+                    WHEN UPPER(TRIM(status_code)) IN ('PE', 'PENDENTE', 'P') THEN 3
+                    ELSE 4 END ASC
+            ) as rn
+        FROM {{ ref('stg_car_properties') }}
+    ) WHERE rn = 1
+),
+
 properties AS (
     SELECT
         UPPER(TRIM(p_meta.property_id)) as property_id,
-        p_meta.property_type,
-        COALESCE(p_class.final_area_ha, 0) as area_ha,
-        p_meta.city,
-        UPPER(TRIM(p_meta.uf_origem)) as uf_origem,
-        -- PADRONIZAÇÃO DE STATUS (Siglas do Governo)
+        o.tipo_imovel_rural as property_type,
+        COALESCE(NULLIF(p_class.final_area_ha, 0), ST_AREA(g.geometry_raw)/10000, 0) as area_ha,
+        o.municipio as city,
+        UPPER(TRIM(COALESCE(o.uf, SUBSTR(p_meta.property_id, 1, 2)))) as uf_origem,
+        o.solicitacao_adesao_pra,
+        o.area_liquida as area_liquida_ha,
         CASE 
-            WHEN UPPER(TRIM(o.registration_status)) IN ('AT', 'ATIVO', 'ANALISADO', 'CCT', 'ANALISADO (COMPLETO)') THEN 'ATIVO'
-            WHEN UPPER(TRIM(o.registration_status)) IN ('PE', 'PENDENTE') THEN 'PENDENTE'
-            WHEN UPPER(TRIM(o.registration_status)) IN ('SU', 'SUSPENSO') THEN 'SUSPENSO'
-            WHEN UPPER(TRIM(o.registration_status)) IN ('CA', 'CANCELADO') THEN 'CANCELADO'
-            ELSE COALESCE(UPPER(TRIM(o.registration_status)), 'ATIVO')
+            -- 1. Mapeamento da Tabela de Metadados Deduplicada
+            WHEN UPPER(TRIM(p_meta.status_code)) IN ('CA', 'CANCELADO', 'C') THEN 'CANCELADO'
+            WHEN UPPER(TRIM(p_meta.status_code)) IN ('SU', 'SUSPENSO', 'S') THEN 'SUSPENSO'
+            WHEN UPPER(TRIM(p_meta.status_code)) IN ('PE', 'PENDENTE', 'P') THEN 'PENDENTE'
+            WHEN UPPER(TRIM(p_meta.status_code)) IN ('AT', 'ATIVO', 'A', 'ANALISADO') THEN 'ATIVO'
+            
+            -- 2. Mapeamento da Tabela de Proprietários (o)
+            WHEN UPPER(TRIM(o.registration_status)) IN ('CA', 'CANCELADO', 'C') THEN 'CANCELADO'
+            WHEN UPPER(TRIM(o.registration_status)) IN ('SU', 'SUSPENSO', 'S') THEN 'SUSPENSO'
+            WHEN UPPER(TRIM(o.registration_status)) IN ('PE', 'PENDENTE', 'P') THEN 'PENDENTE'
+            WHEN UPPER(TRIM(o.registration_status)) IN ('AT', 'ATIVO', 'A', 'ANALISADO', 'CCT', 'ANALISADO (COMPLETO)') THEN 'ATIVO'
+            
+            ELSE 'INCONSISTENTE'
         END as registration_status,
         g.geometry_raw as geometry,
         g.centroid,
@@ -39,12 +64,13 @@ properties AS (
         CASE WHEN g.geometry_raw IS NULL THEN TRUE ELSE FALSE END as is_missing_geometry,
         p_class.final_fiscal_modules as fiscal_modules,
         p_class.producer_size_category,
+        p_meta.status_code as registration_status_geometry,
         p_class.is_small_holder,
         p_class.fmp_ha
-    FROM {{ ref('stg_car_properties') }} p_meta
-    LEFT JOIN {{ ref('int_car_geometries') }} g ON UPPER(TRIM(p_meta.property_id)) = UPPER(TRIM(g.property_id))
-    LEFT JOIN {{ ref('stg_car_owners') }} o ON UPPER(TRIM(p_meta.property_id)) = UPPER(TRIM(o.property_id))
-    LEFT JOIN {{ ref('int_car_properties_classified') }} p_class ON UPPER(TRIM(p_meta.property_id)) = p_class.property_id
+    FROM p_meta_dedup p_meta
+    LEFT JOIN {{ ref('int_car_geometries') }} g ON p_meta.property_id = UPPER(TRIM(g.property_id))
+    LEFT JOIN {{ ref('stg_car_owners') }} o ON p_meta.property_id = UPPER(TRIM(o.property_id))
+    LEFT JOIN {{ ref('int_car_properties_classified') }} p_class ON p_meta.property_id = p_class.property_id
 ),
 
 forensic_areas AS (
@@ -62,6 +88,8 @@ forensic_areas AS (
         SUM(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN target_area_ha ELSE 0 END) as forensic_traditional_ha,
         MAX(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN overlap_pct ELSE 0 END) as settlement_overlap_pct,
         MAX(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN overlap_pct ELSE 0 END) as traditional_overlap_pct,
+        MAX(CASE WHEN target_type = 'RECORTE_INVASAO_UC' THEN overlap_pct ELSE 0 END) as uc_overlap_pct,
+        MAX(CASE WHEN target_type = 'RECORTE_INVASAO_TI' THEN overlap_pct ELSE 0 END) as ti_overlap_pct,
         ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN target_name END) as settlement_name,
         ANY_VALUE(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN target_name END) as traditional_name,
         ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_TI' THEN target_name END) as ti_name,
@@ -101,24 +129,21 @@ embargo_check AS (
     FROM {{ ref('int_property_embargo_overlap') }}
 ),
 
+
 mapbiomas_check AS (
     SELECT
         UPPER(TRIM(car_code)) as property_id,
         MAX(detection_date) as latest_deforestation_date,
         MIN(image_date_before) as earliest_evidence_date,
         MAX(image_date_after) as latest_evidence_date,
-        -- Agregamos os IDs e URLs em strings para não duplicar linhas
         ARRAY_TO_STRING(ARRAY_AGG(DISTINCT CAST(alert_id AS STRING) IGNORE NULLS), ' | ') as mapbiomas_alert_ids,
         ARRAY_TO_STRING(ARRAY_AGG(DISTINCT land_use_class IGNORE NULLS), ' | ') as mapbiomas_classes,
         ARRAY_TO_STRING(ARRAY_AGG(DISTINCT mapbiomas_url IGNORE NULLS), ' | ') as mapbiomas_report_links,
-        -- Somamos as áreas oficiais para comparação
         SUM(COALESCE(deforestation_overlap_ha, 0)) as mapbiomas_total_overlap_ha,
         SUM(COALESCE(official_total_alert_ha, 0)) as mapbiomas_official_alert_ha,
-        -- Flags de sobreposição oficial
         SUM(COALESCE(official_overlap_indigenous_ha, 0)) as mapbiomas_official_ti_ha,
         SUM(COALESCE(official_overlap_quilombola_ha, 0)) as mapbiomas_official_quilombo_ha,
         SUM(COALESCE(official_overlap_settlement_ha, 0)) as mapbiomas_official_settlement_ha,
-        -- Verificamos se algum dos alertas é pós-EUDR
         LOGICAL_OR(is_post_eudr_cutoff) as has_official_eudr_alert
     FROM {{ ref('int_mapbiomas_deforestation') }}
     GROUP BY 1
@@ -126,9 +151,7 @@ mapbiomas_check AS (
 
 full_context AS (
     SELECT
-        p.*, 
-        lp.*, -- GARANTE QUE AS MULTAS (fine_defo, etc) ESTEJAM DISPONÍVEIS
-        sat.max_slope_degrees, sat.relief_classification, sat.last_update,
+        p.*, lp.*, sat.max_slope_degrees, sat.relief_classification, sat.last_update,
         COALESCE(f.forensic_embargo_ha, 0) as embargo_area_ha_raw,
         e.earliest_embargo_date as embargo_date,
         COALESCE(e.has_any_active_embargo, FALSE) as has_any_active_embargo,
@@ -139,25 +162,25 @@ full_context AS (
         f.forensic_app_hidrica_ha, f.forensic_app_declividade_ha,
         mb.latest_deforestation_date as mapbiomas_date,
         mb.earliest_evidence_date, mb.latest_evidence_date,
-        mb.mapbiomas_classes, mb.mapbiomas_report_links,
-        mb.mapbiomas_alert_ids,
-        mb.mapbiomas_total_overlap_ha,
-        mb.mapbiomas_official_alert_ha,
-        mb.mapbiomas_official_ti_ha,
-        mb.mapbiomas_official_quilombo_ha,
-        mb.mapbiomas_official_settlement_ha,
+        mb.mapbiomas_classes, mb.mapbiomas_report_links, mb.mapbiomas_alert_ids,
+        mb.mapbiomas_total_overlap_ha, mb.mapbiomas_official_alert_ha,
+        mb.mapbiomas_official_ti_ha, mb.mapbiomas_official_quilombo_ha, mb.mapbiomas_official_settlement_ha,
         mb.has_official_eudr_alert,
         CASE WHEN (mb.latest_deforestation_date >= lp.eudr_date OR mb.latest_deforestation_date IS NULL) 
              THEN COALESCE(f.forensic_defo_ha, 0) ELSE 0 END as eudr_deforested_ha,
-        sl.match_confidence as slave_labor_match_confidence,
-        sl.slave_labor_inclusion_date,
-        COALESCE(c.biome_name, 'N/A') as biome_name, 
-        c.rl_status, c.rl_deficit_ha, c.rl_balance_ha,
+        sl.match_confidence as slave_labor_match_confidence, sl.slave_labor_inclusion_date,
+        COALESCE(c.biome_name, 'N/A') as biome_name, c.rl_status, c.rl_deficit_ha, c.rl_balance_ha,
+        c.area_rural_consolidada_ha, c.area_pousio_ha, c.area_uso_restrito_ha,
         (COALESCE(f.forensic_ti_ha, 0) + COALESCE(f.forensic_uc_ha, 0) + COALESCE(f.forensic_quilombo_ha, 0) + COALESCE(f.forensic_settlement_ha, 0) + COALESCE(f.forensic_traditional_ha, 0)) as protected_area_overlap_ha_raw,
         f.forensic_ti_ha, f.forensic_quilombo_ha, f.forensic_uc_ha, f.forensic_settlement_ha, f.forensic_traditional_ha, f.data_source_quality,
+        
+        -- LÓGICA DE IDENTIDADE COMPLETA (Sigla + Espacial)
         COALESCE(p.property_type = 'AST' OR f.settlement_overlap_pct > 90, FALSE) as is_settlement_identity,
         COALESCE(p.property_type = 'PCT' OR f.traditional_overlap_pct > 90, FALSE) as is_traditional_identity,
         COALESCE(p.property_type = 'PCT' AND f.forensic_quilombo_ha > 0, FALSE) as is_quilombo_identity,
+        COALESCE(p.property_type = 'UC' OR f.uc_overlap_pct > 90, FALSE) as is_uc_identity,
+        COALESCE(p.property_type = 'TI' OR f.ti_overlap_pct > 90, FALSE) as is_ti_identity,
+        
         f.settlement_name, f.traditional_name, f.ti_name, f.uc_name, f.quilombo_name,
         COALESCE(so.overlap_pct, 0) as car_on_car_overlap_pct,
         COALESCE(so.total_overlapping_cars, 0) as total_overlapping_cars
@@ -168,33 +191,47 @@ full_context AS (
     LEFT JOIN embargo_check e ON p.property_id = e.property_id
     LEFT JOIN mapbiomas_check mb ON p.property_id = mb.property_id 
     LEFT JOIN slave_labor_combined sl ON p.property_id = sl.property_id
-    LEFT JOIN {{ ref('int_car_compliance_metrics') }} c ON UPPER(TRIM(p.property_id)) = UPPER(TRIM(c.property_id))
-    LEFT JOIN {{ ref('int_car_self_overlap') }} so ON p.property_id = so.property_id
+    LEFT JOIN {{ ref('int_car_compliance_metrics') }} c ON p.property_id = c.property_id
+    LEFT JOIN (
+        SELECT property_id, MAX(overlap_pct) as overlap_pct, COUNT(*) as total_overlapping_cars 
+        FROM {{ ref('int_car_self_overlap') }} GROUP BY 1
+    ) so ON p.property_id = so.property_id
 ),
 
 analysis AS (
     SELECT
         *,
-        LEAST(protected_area_overlap_ha_raw, area_ha) as protected_area_fixed_ha,
-        LEAST(mapbiomas_deforested_ha_raw, area_ha) as defo_fixed_ha,
-        LEAST(embargo_area_ha_raw, area_ha) as embargo_fixed_ha,
-        (
-            (slave_labor_match_confidence = 'HIGH') OR 
-            (registration_status IN ('CANCELADO', 'SUSPENSO')) OR 
-            (is_missing_geometry = TRUE) OR
-            (forensic_ti_ha > 0.01 OR forensic_uc_ha > 0.01) OR 
-            (forensic_quilombo_ha > 0.01 AND is_quilombo_identity IS FALSE) OR
-            (forensic_settlement_ha > 0.01 AND is_settlement_identity IS FALSE) OR
-            (forensic_traditional_ha > 0.01 AND is_traditional_identity IS FALSE) OR
-            (mapbiomas_deforested_ha_raw > LEAST(noise_threshold, 0.1) AND (mapbiomas_date >= forest_code_date OR mapbiomas_date IS NULL)) OR 
-            (embargo_area_ha_raw > 0.1 AND (embargo_date >= forest_code_date OR embargo_date IS NULL)) OR 
-            -- SINCRONIA CMN 5.081 (AMAZÔNIA)
-            (biome_name LIKE 'AMAZ%NIA' AND embargo_area_ha_raw >= 0.001 AND (embargo_date >= forest_code_date OR embargo_date IS NULL)) OR
-            (forensic_app_hidrica_ha > 0.01 OR app_deforested_ha_forensic > 0.01) OR 
-            (eudr_deforested_ha > 0.01) OR
-            (max_slope_degrees > 45) OR
-            (rl_deficit_ha > 0.01 AND is_small_holder IS FALSE) OR
-            (EXISTS(SELECT 1 FROM UNNEST(embargo_sources) s WHERE s IN ('IBAMA', 'SEMA_MT', 'SIGA_MT', 'ICMBIO')))
+        LEAST(COALESCE(protected_area_overlap_ha_raw, 0), area_ha) as protected_area_fixed_ha,
+        LEAST(COALESCE(mapbiomas_deforested_ha_raw, 0), area_ha) as defo_fixed_ha,
+        LEAST(COALESCE(embargo_area_ha_raw, 0), area_ha) as embargo_fixed_ha,
+        COALESCE(
+            (
+                -- GRUPO 1: BLOQUEIOS POR COMPORTAMENTO (Punição para qualquer um)
+                (slave_labor_match_confidence = 'HIGH') OR 
+                (registration_status IN ('CANCELADO', 'SUSPENSO')) OR 
+                (registration_status_geometry IN ('CANCELADO', 'SUSPENSO')) OR
+                (is_missing_geometry = TRUE) OR
+                (mapbiomas_deforested_ha_raw > LEAST(noise_threshold, 0.1) AND (mapbiomas_date >= forest_code_date OR mapbiomas_date IS NULL)) OR 
+                (embargo_area_ha_raw > 0.1 AND (embargo_date >= forest_code_date OR embargo_date IS NULL)) OR 
+                (biome_name LIKE 'AMAZ%NIA' AND embargo_area_ha_raw >= 0.001 AND (embargo_date >= forest_code_date OR embargo_date IS NULL)) OR
+                (forensic_app_hidrica_ha > {{ var('gis_noise_ha_threshold') }}) OR 
+                (app_deforested_ha_forensic > {{ var('gis_noise_ha_threshold') }}) OR 
+                (eudr_deforested_ha > {{ var('gis_noise_ha_threshold') }}) OR 
+                (max_slope_degrees > 45) OR 
+                (rl_deficit_ha > 0.01 AND is_small_holder IS FALSE AND (solicitacao_adesao_pra IS NULL OR solicitacao_adesao_pra != 'Sim')) OR
+                (EXISTS(SELECT 1 FROM UNNEST(embargo_sources) AS s WHERE s IN ('IBAMA', 'SEMA_MT', 'SIGA_MT', 'ICMBIO')))
+                
+                OR -- OPERADOR "OU" PARA O PRÓXIMO GRUPO
+
+                -- GRUPO 2: BLOQUEIOS POR LOCALIZAÇÃO (Punição apenas para INVASORES)
+                (
+                    (forensic_ti_ha > {{ var('gis_noise_ha_threshold') }} AND COALESCE(is_ti_identity, FALSE) IS FALSE) OR 
+                    (forensic_uc_ha > {{ var('gis_noise_ha_threshold') }} AND COALESCE(is_uc_identity, FALSE) IS FALSE) OR
+                    (forensic_quilombo_ha > {{ var('gis_noise_ha_threshold') }} AND COALESCE(is_quilombo_identity, FALSE) IS FALSE) OR 
+                    (forensic_settlement_ha > {{ var('gis_noise_ha_threshold') }} AND COALESCE(is_settlement_identity, FALSE) IS FALSE) OR
+                    (forensic_traditional_ha > {{ var('gis_noise_ha_threshold') }} AND COALESCE(is_traditional_identity, FALSE) IS FALSE)
+                )
+            ), FALSE
         ) as is_technically_blocked
     FROM full_context
 )
