@@ -102,6 +102,7 @@ models:
                 - "ELIGIBLE - SETTLEMENT PRODUCER"
                 - "ELIGIBLE - TRADITIONAL PRODUCER"
                 - "ELIGIBLE - QUILOMBOLA PRODUCER"
+                - "WARNING - CRITICAL ADJACENCY RISK (LAUNDERING)"
                 - "WARNING - RISK BY ADJACENCY"
                 - 'WARNING - CRITICAL ADJACENCY RISK'
                 - "WARNING - EMBARGO CANCELLED/JUDICIAL"
