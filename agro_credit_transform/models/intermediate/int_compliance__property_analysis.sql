@@ -38,19 +38,20 @@ properties AS (
     SELECT
         UPPER(TRIM(p_meta.property_id)) as property_id,
         o.tipo_imovel_rural as property_type,
-        COALESCE(NULLIF(p_class.final_area_ha, 0), ST_AREA(g.geometry_raw)/10000, 0) as area_ha,
+        COALESCE(p_meta.area_ha_ajustada, 0) as area_ha,
+        p_meta.area_ha_original,
+        p_meta.is_area_inconsistent,
+        
         o.municipio as city,
         UPPER(TRIM(COALESCE(o.uf, SUBSTR(p_meta.property_id, 1, 2)))) as uf_origem,
         o.solicitacao_adesao_pra,
         o.area_liquida as area_liquida_ha,
         CASE 
-            -- 1. Mapeamento da Tabela de Metadados Deduplicada
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('CA', 'CANCELADO', 'C') THEN 'CANCELADO'
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('SU', 'SUSPENSO', 'S') THEN 'SUSPENSO'
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('PE', 'PENDENTE', 'P') THEN 'PENDENTE'
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('AT', 'ATIVO', 'A', 'ANALISADO') THEN 'ATIVO'
             
-            -- 2. Mapeamento da Tabela de Proprietários (o)
             WHEN UPPER(TRIM(o.registration_status)) IN ('CA', 'CANCELADO', 'C') THEN 'CANCELADO'
             WHEN UPPER(TRIM(o.registration_status)) IN ('SU', 'SUSPENSO', 'S') THEN 'SUSPENSO'
             WHEN UPPER(TRIM(o.registration_status)) IN ('PE', 'PENDENTE', 'P') THEN 'PENDENTE'
@@ -76,25 +77,31 @@ properties AS (
 forensic_areas AS (
     SELECT
         UPPER(TRIM(property_id)) as property_id,
-        SUM(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_MAPBIOMAS' THEN target_area_ha ELSE 0 END) as forensic_defo_ha,
-        SUM(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_EM_APP' THEN target_area_ha ELSE 0 END) as app_deforested_ha_forensic,
-        SUM(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_EM_APP_HIDRICA' THEN target_area_ha ELSE 0 END) as forensic_app_hidrica_ha,
-        SUM(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_EM_APP_DECLIVIDADE' THEN target_area_ha ELSE 0 END) as forensic_app_declividade_ha,
-        SUM(CASE WHEN target_type = 'RECORTE_EMBARGO' THEN target_area_ha ELSE 0 END) as forensic_embargo_ha,
-        SUM(CASE WHEN target_type = 'RECORTE_INVASAO_TI' THEN target_area_ha ELSE 0 END) as forensic_ti_ha,
-        SUM(CASE WHEN target_type = 'RECORTE_INVASAO_QUILOMBO' THEN target_area_ha ELSE 0 END) as forensic_quilombo_ha,
-        SUM(CASE WHEN target_type = 'RECORTE_INVASAO_UC' THEN target_area_ha ELSE 0 END) as forensic_uc_ha,
-        SUM(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN target_area_ha ELSE 0 END) as forensic_settlement_ha,
-        SUM(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN target_area_ha ELSE 0 END) as forensic_traditional_ha,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_MAPBIOMAS' THEN geometry END)) / 10000, 0) as forensic_defo_ha,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_EM_APP' THEN geometry END)) / 10000, 0) as app_deforested_ha_forensic,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_EM_APP_HIDRICA' THEN geometry END)) / 10000, 0) as forensic_app_hidrica_ha,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_DESMATAMENTO_EM_APP_DECLIVIDADE' THEN geometry END)) / 10000, 0) as forensic_app_declividade_ha,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_EMBARGO' THEN geometry END)) / 10000, 0) as forensic_embargo_ha,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_INVASAO_TI' THEN geometry END)) / 10000, 0) as forensic_ti_ha,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_INVASAO_QUILOMBO' THEN geometry END)) / 10000, 0) as forensic_quilombo_ha,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_INVASAO_UC' THEN geometry END)) / 10000, 0) as forensic_uc_ha,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN geometry END)) / 10000, 0) as forensic_settlement_ha,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN geometry END)) / 10000, 0) as forensic_traditional_ha,
+        COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_SOBREPOSICAO_RODOVIA' THEN geometry END)) / 10000, 0) as forensic_road_overlap_ha,
+
         MAX(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN overlap_pct ELSE 0 END) as settlement_overlap_pct,
         MAX(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN overlap_pct ELSE 0 END) as traditional_overlap_pct,
         MAX(CASE WHEN target_type = 'RECORTE_INVASAO_UC' THEN overlap_pct ELSE 0 END) as uc_overlap_pct,
         MAX(CASE WHEN target_type = 'RECORTE_INVASAO_TI' THEN overlap_pct ELSE 0 END) as ti_overlap_pct,
+        
         ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN target_name END) as settlement_name,
         ANY_VALUE(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN target_name END) as traditional_name,
         ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_TI' THEN target_name END) as ti_name,
         ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_UC' THEN target_name END) as uc_name,
         ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_QUILOMBO' THEN target_name END) as quilombo_name,
+        
+        ARRAY_TO_STRING(ARRAY_AGG(DISTINCT CASE WHEN target_type = 'RECORTE_SOBREPOSICAO_RODOVIA' THEN target_name END IGNORE NULLS), ' | ') as road_names,
+        
         MAX(data_source_quality) as data_source_quality
     FROM {{ ref('int_compliance_forensic_shapes') }}
     GROUP BY 1
@@ -160,6 +167,8 @@ full_context AS (
         COALESCE(f.forensic_defo_ha, 0) as mapbiomas_deforested_ha_raw,
         COALESCE(f.app_deforested_ha_forensic, 0) as app_deforested_ha_forensic,
         f.forensic_app_hidrica_ha, f.forensic_app_declividade_ha,
+        COALESCE(f.forensic_road_overlap_ha, 0) as road_overlap_ha_raw,
+        f.road_names,
         mb.latest_deforestation_date as mapbiomas_date,
         mb.earliest_evidence_date, mb.latest_evidence_date,
         mb.mapbiomas_classes, mb.mapbiomas_report_links, mb.mapbiomas_alert_ids,
@@ -173,14 +182,11 @@ full_context AS (
         c.area_rural_consolidada_ha, c.area_pousio_ha, c.area_uso_restrito_ha,
         (COALESCE(f.forensic_ti_ha, 0) + COALESCE(f.forensic_uc_ha, 0) + COALESCE(f.forensic_quilombo_ha, 0) + COALESCE(f.forensic_settlement_ha, 0) + COALESCE(f.forensic_traditional_ha, 0)) as protected_area_overlap_ha_raw,
         f.forensic_ti_ha, f.forensic_quilombo_ha, f.forensic_uc_ha, f.forensic_settlement_ha, f.forensic_traditional_ha, f.data_source_quality,
-        
-        -- LÓGICA DE IDENTIDADE COMPLETA (Sigla + Espacial)
         COALESCE(p.property_type = 'AST' OR f.settlement_overlap_pct > 90, FALSE) as is_settlement_identity,
         COALESCE(p.property_type = 'PCT' OR f.traditional_overlap_pct > 90, FALSE) as is_traditional_identity,
         COALESCE(p.property_type = 'PCT' AND f.forensic_quilombo_ha > 0, FALSE) as is_quilombo_identity,
         COALESCE(p.property_type = 'UC' OR f.uc_overlap_pct > 90, FALSE) as is_uc_identity,
         COALESCE(p.property_type = 'TI' OR f.ti_overlap_pct > 90, FALSE) as is_ti_identity,
-        
         f.settlement_name, f.traditional_name, f.ti_name, f.uc_name, f.quilombo_name,
         COALESCE(so.overlap_pct, 0) as car_on_car_overlap_pct,
         COALESCE(so.total_overlapping_cars, 0) as total_overlapping_cars
@@ -204,9 +210,10 @@ analysis AS (
         LEAST(COALESCE(protected_area_overlap_ha_raw, 0), area_ha) as protected_area_fixed_ha,
         LEAST(COALESCE(mapbiomas_deforested_ha_raw, 0), area_ha) as defo_fixed_ha,
         LEAST(COALESCE(embargo_area_ha_raw, 0), area_ha) as embargo_fixed_ha,
+        LEAST(COALESCE(road_overlap_ha_raw, 0), area_ha) as road_fixed_ha,
+
         COALESCE(
             (
-                -- GRUPO 1: BLOQUEIOS POR COMPORTAMENTO (Punição para qualquer um)
                 (slave_labor_match_confidence = 'HIGH') OR 
                 (registration_status IN ('CANCELADO', 'SUSPENSO')) OR 
                 (registration_status_geometry IN ('CANCELADO', 'SUSPENSO')) OR
@@ -220,10 +227,7 @@ analysis AS (
                 (max_slope_degrees > 45) OR 
                 (rl_deficit_ha > 0.01 AND is_small_holder IS FALSE AND (solicitacao_adesao_pra IS NULL OR solicitacao_adesao_pra != 'Sim')) OR
                 (EXISTS(SELECT 1 FROM UNNEST(embargo_sources) AS s WHERE s IN ('IBAMA', 'SEMA_MT', 'SIGA_MT', 'ICMBIO')))
-                
-                OR -- OPERADOR "OU" PARA O PRÓXIMO GRUPO
-
-                -- GRUPO 2: BLOQUEIOS POR LOCALIZAÇÃO (Punição apenas para INVASORES)
+                OR 
                 (
                     (forensic_ti_ha > {{ var('gis_noise_ha_threshold') }} AND COALESCE(is_ti_identity, FALSE) IS FALSE) OR 
                     (forensic_uc_ha > {{ var('gis_noise_ha_threshold') }} AND COALESCE(is_uc_identity, FALSE) IS FALSE) OR
@@ -234,5 +238,18 @@ analysis AS (
             ), FALSE
         ) as is_technically_blocked
     FROM full_context
+),
+
+-- NOVA CTE PARA RESOLVER O ERRO DE NOME NÃO RECONHECIDO
+final_eligibility_check AS (
+    SELECT
+        *,
+        CASE 
+            WHEN is_area_inconsistent THEN 'MANUAL_REVIEW - INCONSISTENT AREA'
+            WHEN is_technically_blocked THEN 'BLOCKED'
+            ELSE 'ELIGIBLE'
+        END as eligibility_status
+    FROM analysis
 )
-SELECT * FROM analysis
+
+SELECT * FROM final_eligibility_check

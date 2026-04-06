@@ -8,7 +8,10 @@
 WITH staging_data AS (
     SELECT 
         property_id,
-        area_ha,
+        -- Novas colunas vindas da staging refatorada
+        area_ha_original,
+        area_ha_ajustada,
+        is_area_inconsistent,
         fiscal_modules,
         status_code,
         condition_desc,
@@ -23,16 +26,7 @@ WITH staging_data AS (
 
 spatial_processing AS (
     SELECT
-        property_id,
-        area_ha,
-        fiscal_modules,
-        status_code,
-        condition_desc,
-        property_type,
-        city,
-        state,
-        uf_origem,
-        ingested_at,
+        * EXCEPT(geometry_wkt),
         -- Converte WKT para Geography com correção topológica
         SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry_raw
     FROM staging_data
@@ -41,22 +35,12 @@ spatial_processing AS (
 
 final_cleaning AS (
     SELECT 
-        property_id,
-        area_ha,
-        fiscal_modules,
-        status_code,
-        condition_desc,
-        property_type,
-        city,
-        state,
-        uf_origem,
-        ingested_at,
-        geometry_raw,
+        *,
         -- Geometria Simplificada para visualização (20m de tolerância)
         ST_SIMPLIFY(geometry_raw, 20) as geometry_simplified,
         -- Centróide para análise de bioma e pins de mapa
         ST_CENTROID(geometry_raw) as centroid,
-        -- 🟢 O PULO DO GATO: Cálculo da Bounding Box para o Join de vizinhança
+        -- Cálculo da Bounding Box para Joins espaciais performáticos
         ST_BOUNDINGBOX(geometry_raw) as car_bbox,
         -- Deduplicação garantindo a versão mais recente
         ROW_NUMBER() OVER(PARTITION BY property_id ORDER BY ingested_at DESC) as rn
@@ -67,7 +51,9 @@ final_cleaning AS (
 
 SELECT 
     property_id,
-    area_ha,
+    area_ha_original,
+    area_ha_ajustada,
+    is_area_inconsistent,
     fiscal_modules,
     status_code,
     condition_desc,
@@ -77,19 +63,11 @@ SELECT
     uf_origem,
     ingested_at,
     
-    -- 1. Geometria Bruta (Uso em Cálculos de Passivo/ART)
+    -- Geometrias para diferentes usos
     geometry_raw,
-    
-    -- 2. Geometria de Compatibilidade
-    geometry_raw as geometry,
-    
-    -- 3. Geometria de Visualização
+    geometry_raw as geometry, -- Alias para compatibilidade com modelos legados
     geometry_simplified,
-    
-    -- 4. Ponto de Referência
     centroid,
-
-    -- 5. 🟢 EXPORTANDO A BBOX: Sem isso o Mart não enxerga a coluna!
     car_bbox
 
 FROM final_cleaning 

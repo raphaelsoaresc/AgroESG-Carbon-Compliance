@@ -54,7 +54,26 @@ recortes_paredes AS (
         ON  c.car_bbox.xmin <= r.bbox.xmax AND c.car_bbox.xmax >= r.bbox.xmin 
         AND c.car_bbox.ymin <= r.bbox.ymax AND c.car_bbox.ymax >= r.bbox.ymin
         AND ST_INTERSECTS(c.geometry, r.geometry)
-    WHERE r.restriction_type NOT IN ('BIOME', 'APP_ZONE')
+    WHERE r.restriction_type NOT IN ('BIOME', 'APP_ZONE', 'INFRASTRUCTURE')
+),
+
+-- NOVO RECORTE: INVASÃO DE FAIXA DE DOMÍNIO (RODOVIAS)
+recortes_rodovias AS (
+    SELECT
+        c.property_id, 
+        c.uf_origem,
+        c.property_total_area_ha,
+        CAST(r.restriction_id AS STRING) as target_id,
+        CAST(r.restriction_name AS STRING) as target_name,
+        ST_INTERSECTION(c.geometry, r.geometry) as geometry,
+        'RECORTE_SOBREPOSICAO_RODOVIA' as target_type
+    FROM car_base c
+    INNER JOIN {{ ref('int_brazil_reference_geometries') }} r 
+        ON  c.car_bbox.xmin <= r.bbox.xmax AND c.car_bbox.xmax >= r.bbox.xmin 
+        AND c.car_bbox.ymin <= r.bbox.ymax AND c.car_bbox.ymax >= r.bbox.ymin
+        AND ST_INTERSECTS(c.geometry, r.geometry)
+    WHERE r.restriction_type = 'INFRASTRUCTURE'
+      AND r.restriction_subtype = 'ROAD'
 ),
 
 recortes_embargos AS (
@@ -108,6 +127,8 @@ unioned AS (
     SELECT property_id, uf_origem, property_total_area_ha, CAST(NULL AS STRING) as target_id, CAST(NULL AS STRING) as target_name, geometry, 'SIGEF_TOTAL' as target_type FROM sigef_base
     UNION ALL
     SELECT property_id, uf_origem, property_total_area_ha, target_id, target_name, geometry, target_type FROM recortes_paredes
+    UNION ALL
+    SELECT property_id, uf_origem, property_total_area_ha, target_id, target_name, geometry, target_type FROM recortes_rodovias
     UNION ALL
     SELECT property_id, uf_origem, property_total_area_ha, target_id, target_name, geometry, target_type FROM recortes_embargos
     UNION ALL

@@ -14,9 +14,9 @@ WITH car_data AS (
         g.geometry_raw,
         g.geometry_simplified,
         -- Otimização 1: Cálculo da Bounding Box (retângulo envolvente)
-        -- Retorna uma STRUCT com xmin, xmax, ymin, ymax
         ST_BOUNDINGBOX(g.geometry_simplified) as bbox,
-        g.area_ha,
+        -- AJUSTE: Usando a área ajustada para que o cálculo de % faça sentido
+        g.area_ha_ajustada,
         grid.grid_id
     FROM {{ ref('int_car_geometries') }} g
     INNER JOIN {{ ref('int_car_grid_mapping') }} grid ON g.property_id = grid.property_id
@@ -33,21 +33,20 @@ spatial_intersection AS (
         a.property_id,
         a.grid_id,
         b.property_id as overlapping_property_id,
-        a.area_ha as original_area_ha,
+        -- AJUSTE: Referência para a nova coluna
+        a.area_ha_ajustada as original_area_ha,
         -- O cálculo pesado (ST_INTERSECTION) só ocorre para quem passar nos filtros do WHERE
         ST_AREA(ST_INTERSECTION(a.geometry_raw, b.geometry_raw)) / 10000 as overlap_area_ha
     FROM car_data a
     INNER JOIN car_data b ON a.grid_id = b.grid_id 
     WHERE a.property_id != b.property_id 
       -- Otimização 2: Comparação matemática de Bounding Boxes
-      -- Descarta ~90% dos casos sem custo computacional de funções geográficas
       AND a.bbox.xmin <= b.bbox.xmax 
       AND a.bbox.xmax >= b.bbox.xmin 
       AND a.bbox.ymin <= b.bbox.ymax 
       AND a.bbox.ymax >= b.bbox.ymin
       
       -- Filtro rápido (Geometria Simplificada)
-      -- Refina a busca antes do cálculo de área exata usando GEOGRAPHY
       AND ST_INTERSECTS(a.geometry_simplified, b.geometry_simplified) 
 ),
 
@@ -69,7 +68,7 @@ SELECT
     grid_id,
     total_overlapping_cars,
     total_overlap_ha,
-    -- Percentual de sobreposição em relação à área total da fazenda
+    -- Percentual de sobreposição em relação à área ajustada da fazenda
     SAFE_DIVIDE(total_overlap_ha, area_ha) as overlap_pct,
     CURRENT_TIMESTAMP() as calculated_at
 FROM aggregated_overlaps

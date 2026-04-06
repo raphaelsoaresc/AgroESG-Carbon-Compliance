@@ -158,13 +158,22 @@ models:
           - not_null
 
   - name: int_brazil_reference_geometries
-    description: "Base unificada de restrições territoriais do Brasil (Biomas, TIs, UCs, Quilombos, Assentamentos, APPs)."
+    description: "Base unificada de restrições territoriais e infraestrutura (Biomas, TIs, UCs, Quilombos, Assentamentos, APPs e Rodovias)."
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - restriction_id
             - restriction_type
     columns:
+      - name: restriction_type
+        description: "Tipo da geometria (Ex: APP_ZONE para barreiras, INFRASTRUCTURE para vetores logísticos)."
+        data_tests:
+          - accepted_values:
+              values: ['BIOME', 'INDIGENOUS_LAND', 'APP_ZONE', 'QUILOMBOLA', 'CONSERVATION_UNIT', 'SETTLEMENT', 'INFRASTRUCTURE']
+      - name: restriction_subtype
+        description: "Subtipo detalhado (Ex: RIVER, WATER_BODY, ROAD)."
+        data_tests:
+          - not_null
       - name: geometry
         data_tests:
           - not_null
@@ -188,3 +197,47 @@ models:
         description: "Polígono exato da intersecção ou área total."
         data_tests:
           - not_null
+
+  # --- MODELOS DE VIZINHANÇA E BARREIRAS (LAVAGEM DE GRÃOS) ---
+
+  - name: int_neighbor_barriers_mt
+    description: "Análise de vizinhança e barreiras físicas/logísticas para Mato Grosso."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [property_id, neighbor_id]
+    columns: &neighbor_columns
+      - name: property_id
+        data_tests: [not_null]
+      - name: neighbor_id
+        data_tests: [not_null]
+      - name: distance_meters
+        data_tests:
+          # AJUSTE PERICIAL: Substituído expression_is_true por accepted_range para auditoria forense
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1000
+      - name: is_physically_blocked
+        data_tests: [not_null]
+      - name: has_road_connection
+        data_tests: [not_null]
+
+  - name: int_neighbor_barriers_pa
+    description: "Análise de vizinhança e barreiras físicas/logísticas para o Pará."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [property_id, neighbor_id]
+    columns: *neighbor_columns
+
+  - name: int_neighbor_barriers_ro
+    description: "Análise de vizinhança e barreiras físicas/logísticas para Rondônia."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [property_id, neighbor_id]
+    columns: *neighbor_columns
+
+  - name: int_neighbor_barriers_am
+    description: "Análise de vizinhança e barreiras físicas/logísticas para o Amazonas."
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [property_id, neighbor_id]
+    columns: *neighbor_columns
