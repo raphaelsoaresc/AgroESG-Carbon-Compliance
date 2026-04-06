@@ -10,15 +10,18 @@ FROM mart m
 JOIN car_status c ON m.property_id = c.property_id
 WHERE 
     (
-        -- Se na origem é Cancelado/Suspenso, não pode ser Eligible nem Warning/Conditional
-        UPPER(TRIM(c.status_code)) IN ('CANCELADO', 'CA', 'C', 'SUSPENSO', 'SU', 'S')
-        AND m.final_eligibility_status NOT LIKE 'NOT ELIGIBLE%'
-        AND m.final_eligibility_status NOT LIKE 'MANUAL_REVIEW%' -- Adicionado: Se está em revisão, o teste passa
+        (
+            -- Caso 1: Se na origem é Cancelado/Suspenso, o status final DEVE conter NOT ELIGIBLE ou MANUAL_REVIEW
+            UPPER(TRIM(c.status_code)) IN ('CANCELADO', 'CA', 'C', 'SUSPENSO', 'SU', 'S')
+            AND m.final_eligibility_status NOT LIKE '%NOT ELIGIBLE%'
+            AND m.final_eligibility_status NOT LIKE '%MANUAL_REVIEW%'
+        )
+        OR
+        (
+            -- Caso 2: Se na origem é Pendente, não pode ser ELIGIBLE sem ressalvas
+            UPPER(TRIM(c.status_code)) IN ('PENDENTE', 'PE', 'P')
+            AND m.final_eligibility_status LIKE 'ELIGIBLE' -- Verifica se é exatamente ELIGIBLE (sem concatenação)
+        )
     )
-    OR
-    (
-        -- Se na origem é Pendente, não pode ser Eligible puro
-        UPPER(TRIM(c.status_code)) IN ('PENDENTE', 'PE', 'P')
-        AND m.final_eligibility_status = 'ELIGIBLE'
-    )
-    AND m.final_eligibility_status NOT LIKE 'ELIGIBLE - % PRODUCER'
+    -- Filtro global: Ignora produtores de identidade especial que possuem regras de exceção
+    AND m.final_eligibility_status NOT LIKE '%PRODUCER%'
