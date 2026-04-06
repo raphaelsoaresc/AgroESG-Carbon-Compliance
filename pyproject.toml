@@ -8,7 +8,7 @@ dependencies = [
     # --- Core Engine (O "Motor" do ELT) ---
     "apache-airflow[google,postgres]==2.10.0",
     "psycopg2-binary>=2.9.0",
-    "duckdb>=1.0.0",
+    "duckdb>=1.1.1",
     "pyarrow>=14.0.0",
     # --- Cloud & Storage (A "Infra") ---
     "google-cloud-storage",
