@@ -14,31 +14,31 @@ renamed_and_filtered AS (
         CAST(ALERTID AS INT64) as alert_id,
         CAST(ALERTCODE AS INT64) as alert_code,
         
-        -- Datas (Originais)
-        -- Nota: Como no seu schema DETECTAT já é DATE, o SAFE_CAST garante compatibilidade
-        SAFE_CAST(DETECTAT AS DATE) as detection_date,
+        -- Datas e Flags
+        CASE WHEN DETECTAT IS NULL THEN TRUE ELSE FALSE END as is_undated_alert,
+        COALESCE(SAFE_CAST(DETECTAT AS DATE), CAST('1900-01-01' AS DATE)) as detection_date,
         CAST(DETECTYEAR AS INT64) as detection_year,
 
-        -- Datas de Imagem (Corrigido para BEFOR... conforme schema)
+        -- Datas de Imagem
         SAFE_CAST(BEFORIMGDT AS DATE) as image_date_before,
         SAFE_CAST(AFTERIMGDT AS DATE) as image_date_after,
         
-        -- Métricas (Originais)
+        -- Métricas
         SAFE_CAST(ALERTHA AS FLOAT64) as alert_area_ha,
         SOURCE as source_satellite,
         BIOME as biome,
 
-        -- Métricas de Sobreposição e Áreas (Novas Colunas)
+        -- Métricas de Sobreposição e Áreas
         ALERTHA as total_alert_ha,
         INLANDHA as overlap_indigenous_ha,
         QUILHA as overlap_quilombola_ha,
         SETTLHA as overlap_settlement_ha,
 
-        -- Classificação e Fontes (Novas Colunas)
+        -- Classificação e Fontes
         SOURCE as alert_source,
         ALERTCLASS as land_use_class,
 
-        -- Link dinâmico para o laudo oficial (Nova Coluna)
+        -- Link dinâmico para o laudo oficial
         'https://plataforma.alerta.mapbiomas.org/alerta/' || CAST(ALERTID AS STRING) as mapbiomas_url,
         
         -- Geometria
@@ -64,5 +64,4 @@ deduplicated AS (
 SELECT * EXCEPT(row_num)
 FROM deduplicated
 WHERE row_num = 1
-  AND detection_date IS NOT NULL
   AND geometry IS NOT NULL

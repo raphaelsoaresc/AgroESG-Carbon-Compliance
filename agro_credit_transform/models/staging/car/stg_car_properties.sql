@@ -19,11 +19,16 @@ renamed_and_filtered AS (
         -- Identifiers
         cod_imovel as property_id,
         
-        -- AJUSTE DA TRAVA DE SANIDADE: Limite baixado de 500k para 10k para capturar pequenas posses em m²
+        -- LÓGICA DE ÁREA REVISADA
+        SAFE_CAST(num_area AS FLOAT64) as area_ha_original,
         CASE 
             WHEN SAFE_CAST(num_area AS FLOAT64) > 10000 THEN SAFE_CAST(num_area AS FLOAT64) / 10000
             ELSE SAFE_CAST(num_area AS FLOAT64)
-        END as area_ha,
+        END as area_ha_ajustada,
+        CASE 
+            WHEN SAFE_CAST(num_area AS FLOAT64) <= 0 OR SAFE_CAST(num_area AS FLOAT64) > 1000000 THEN TRUE 
+            ELSE FALSE 
+        END as is_area_inconsistent,
 
         SAFE_CAST(mod_fiscal AS FLOAT64) as fiscal_modules,
         
@@ -36,9 +41,9 @@ renamed_and_filtered AS (
             ELSE UPPER(TRIM(ind_status))
         END as status_code,
 
-        des_condic as condition_desc, -- COLUNA RESTAURADA AQUI
+        des_condic as condition_desc,
 
-        -- PADRONIZAÇÃO DE TIPO (Para bater com stg_car_owners e lógica de identidade)
+        -- PADRONIZAÇÃO DE TIPO
         CASE 
             WHEN UPPER(TRIM(ind_tipo)) IN ('IRU', 'IMÓVEL RURAL') THEN 'IRU'
             WHEN UPPER(TRIM(ind_tipo)) IN ('AST', 'ASSENTAMENTO') THEN 'AST'
@@ -76,4 +81,3 @@ deduplicated AS (
 SELECT * EXCEPT(row_num)
 FROM deduplicated
 WHERE row_num = 1
-    AND area_ha > 0

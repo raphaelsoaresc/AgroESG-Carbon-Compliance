@@ -181,3 +181,34 @@ sources:
 
       - name: ibge_bc250_app_zones
         description: "Zonas de APP de massas d'água (lagos/represas) da BC250."
+
+      # --- INFRAESTRUTURA, HIDROGRAFIA E VETORES DE RISCO ---
+      - name: ana_rios_app
+        description: "Zonas de APP ao longo de rios (ANA). Baseado na Ordem de Strahler com buffers de 30m, 50m e 100m."
+        loaded_at_field: ingested_at
+        columns:
+          - name: id_origem
+            description: "Coluna COBACIA do arquivo original da ANA."
+          - name: wkt_geom_app
+            description: "Polígono da APP simplificado (EPSG:4326)."
+          - <<: *hash_control
+
+      - name: ibge_rodovias_risco
+        description: "Faixas de domínio e risco de desmatamento em rodovias (IBGE BC250). Buffers de 40m (Federais/Estaduais) e 20m (Outras)."
+        loaded_at_field: ingested_at
+        columns:
+          - name: id_origem
+            description: "ID sequencial gerado na ingestão."
+          - name: wkt_geom_app
+            description: "Polígono da área de influência da rodovia (EPSG:4326)."
+          - <<: *hash_control
+
+      - name: ibge_massas_agua_app
+        description: "Zonas de proteção (APP) ao redor de massas d'água, lagos e represas (IBGE BC250). Buffer fixo de 30m."
+        loaded_at_field: ingested_at
+        columns:
+          - name: id_origem
+            description: "ID sequencial gerado na ingestão."
+          - name: wkt_geom_app
+            description: "Polígono da zona de proteção da massa d'água (EPSG:4326)."
+          - <<: *hash_control

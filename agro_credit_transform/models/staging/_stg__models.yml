@@ -2,16 +2,18 @@ version: 2
 
 models:
   - name: stg_car_properties
-    description: "Propriedades do CAR com áreas filtradas e geometrias em WKT."
+    description: "Propriedades do CAR com áreas originais e ajustadas para transparência forense."
     columns:
       - name: property_id
         data_tests:
           - unique
           - not_null
-      - name: area_ha
-        data_tests:
-          - dbt_utils.expression_is_true:
-              expression: "> 0" # Filtro já aplicado no SQL
+      - name: area_ha_original
+        description: "Valor bruto da área (num_area) como consta na fonte original do governo."
+      - name: area_ha_ajustada
+        description: "Área tratada para hectares (converte m2 para ha se necessário)."
+      - name: is_area_inconsistent
+        description: "Flag booleana: TRUE se a área original for <= 0 ou > 1.000.000 ha."
       - name: status_code
         description: "Código do status da propriedade (ind_status no raw)."
 
@@ -33,26 +35,25 @@ models:
         description: "Flag booleana indicando se o embargo ainda é vigente."
 
   - name: stg_mapbiomas_alertas
-    description: "Alertas de desmatamento validados (Opção 3). A fonte da verdade para geometria e data."
+    description: "Alertas de desmatamento validados. Inclui tratamento para alertas sem data original."
     columns:
       - name: alert_id
         description: "ID único do alerta."
         data_tests:
           - unique
           - not_null
-
+      - name: is_undated_alert
+        description: "Indica se o MapBiomas omitiu a data de detecção original (DETECTAT)."
       - name: detection_date
-        description: "Data da detecção. CRUCIAL para a regra do Marco Temporal (Jul/2008)."
+        description: "Data da detecção. Alertas sem data são preenchidos com '1900-01-01' para evitar quebra de joins."
         data_tests:
           - not_null
-
       - name: alert_area_ha
         description: "Área do desmatamento em hectares."
         data_tests:
           - not_null
           - dbt_utils.expression_is_true:
               expression: "> 0"
-
       - name: geometry
         description: "Geometria do polígono (GEOGRAPHY)."
         data_tests:
@@ -61,7 +62,6 @@ models:
   - name: stg_mapbiomas_property_crossings
     description: "Tabela de ligação (Bridge) entre Alertas e Imóveis (Opção 4)."
     data_tests:
-      # Garante que não haja duplicidade do mesmo alerta no mesmo CAR
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - alert_id
@@ -70,20 +70,16 @@ models:
       - name: alert_id
         data_tests:
           - not_null
-          # Garante que este ID existe na tabela de alertas (Integridade Referencial)
           - relationships:
               to: ref('stg_mapbiomas_alertas')
               field: alert_id
-
       - name: car_code
         description: "Código do imóvel (CAR) limpo."
         data_tests:
           - not_null
-          # Garante que este CAR existe na sua base de propriedades
           - relationships:
               to: ref('stg_car_properties')
               field: property_id
-
       - name: overlap_area_ha
         description: "Área de intersecção entre o alerta e o imóvel."
         data_tests:
@@ -97,11 +93,10 @@ models:
         description: "CPF/CNPJ do infrator limpo."
         data_tests:
           - not_null
-          # Removido o 'unique' daqui, pois existem infratores reincidentes na vida real
       - name: employer_name
         description: "Nome do empregador em UPPER CASE."
         data_tests:
-          - not_null # BLINDAGEM: Como é usado como chave de JOIN na fct, não pode ser nulo
+          - not_null
       - name: inclusion_date
         data_tests:
           - not_null
@@ -133,21 +128,18 @@ models:
     description: "Sobreposições nativas do SICAR (TIs, UCs, etc)."
     columns:
       - name: property_id
-        description: "ID do CAR. Não é unique pois uma fazenda pode cruzar com TI e UC ao mesmo tempo."
+        description: "ID do CAR."
         data_tests:
           - not_null
 
-  # --- NOVOS MODELOS DE EMBARGOS ---
   - name: stg_siga_mt__embargos
     description: "Novos polígonos de embargos do sistema SIGA (MT)."
     columns:
       - name: embargo_id
-        description: "ID único do embargo no SIGA."
         data_tests:
           - unique
           - not_null
       - name: geometry
-        description: "Polígono do embargo convertido para GEOGRAPHY."
         data_tests:
           - not_null
 
@@ -155,12 +147,10 @@ models:
     description: "Base histórica de embargos da SEMA (MT)."
     columns:
       - name: embargo_id
-        description: "ID único do embargo na base histórica (OBJECTID)."
         data_tests:
           - unique
           - not_null
       - name: geometry
-        description: "Polígono do embargo convertido para GEOGRAPHY."
         data_tests:
           - not_null
 
@@ -168,16 +158,13 @@ models:
     description: "Infrações e embargos dentro de UCs federais (ICMBio)."
     columns:
       - name: embargo_id
-        description: "Número do embargo no ICMBio."
         data_tests:
           - unique
           - not_null
       - name: geometry
-        description: "Polígono do embargo convertido para GEOGRAPHY."
         data_tests:
           - not_null
 
-  # --- REFERÊNCIA TERRITORIAL (PAREDES) ---
   - name: stg_icmbio__unidades_conservacao
     description: "Limites das UCs Federais (ICMBio)."
     columns:
@@ -230,5 +217,63 @@ models:
           - unique
           - not_null
       - name: geometry
+        data_tests:
+          - not_null
+
+  - name: stg_ana__rios_app
+    description: "Zonas de APP de rios baseadas na Ordem de Strahler (ANA)."
+    columns:
+      - name: basin_code
+        data_tests:
+          - unique
+          - not_null
+      - name: category
+        data_tests:
+          - accepted_values:
+              values: ['Rio']
+      - name: buffer_meters
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 30"
+      - name: geometry_wkt
+        data_tests:
+          - not_null
+
+  - name: stg_ibge__rodovias_risco
+    description: "Faixas de domínio e risco em rodovias (IBGE BC250)."
+    columns:
+      - name: road_id
+        data_tests:
+          - unique
+          - not_null
+      - name: category
+        data_tests:
+          - accepted_values:
+              values: ['Rodovia']
+      - name: buffer_meters
+        data_tests:
+          - not_null
+      - name: geometry_wkt
+        data_tests:
+          - not_null
+
+  - name: stg_ibge__massas_agua_app
+    description: "Zonas de proteção de lagos e massas d'água (IBGE BC250)."
+    columns:
+      - name: water_body_id
+        data_tests:
+          - unique
+          - not_null
+      - name: category
+        data_tests:
+          - accepted_values:
+              values: ["Massa dagua"]
+      - name: buffer_meters
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "= 30"
+      - name: geometry_wkt
         data_tests:
           - not_null
