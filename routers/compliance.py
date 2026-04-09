@@ -1,3 +1,4 @@
+# routers/compliance.py - VERSÃO ATUALIZADA
 import io
 import json
 import ast
@@ -15,8 +16,8 @@ from services.billing import get_current_user, check_user_permission, register_u
 
 router = APIRouter(tags=["Compliance"])
 
-TABLE_NAME = "fct_compliance_latest" # Nome da tabela final do Mart
-GEOMETRY_TABLE = "fct_compliance_geometries" # Nome da tabela de geometrias
+TABLE_NAME = "fct_compliance_latest" 
+GEOMETRY_TABLE = "fct_compliance_geometries" 
 
 def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceResponse:
     
@@ -62,13 +63,20 @@ def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceRespon
         max_slope_degrees=clean_num(row.get("max_slope_degrees")),
         relief_classification=clean_str(row.get("relief_classification"), "N/A"),
         
+        # Status e Confiança
         final_eligibility_status=clean_str(row.get("final_eligibility_status"), "UNKNOWN"),
+        final_eligibility_status_detailed=clean_str(row.get("final_eligibility_status_detailed")),
         is_technically_blocked=clean_bool(row.get("is_technically_blocked")),
         geospatial_confidence_level=clean_str(row.get("geospatial_confidence_level"), "LOW"),
+        data_reliability_index=int(clean_num(row.get("data_reliability_index"), 0)),
+        forensic_summary=clean_str(row.get("forensic_summary")),
         
+        # Identidades
         is_settlement_identity=clean_bool(row.get("is_settlement_identity")),
         is_traditional_identity=clean_bool(row.get("is_traditional_identity")),
         is_quilombo_identity=clean_bool(row.get("is_quilombo_identity")),
+        is_ti_identity=clean_bool(row.get("is_ti_identity")),
+        is_uc_identity=clean_bool(row.get("is_uc_identity")),
         producer_size_category=clean_str(row.get("producer_size_category"), "N/A"),
         is_small_holder=clean_bool(row.get("is_small_holder")),
         
@@ -93,7 +101,8 @@ def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceRespon
             rl_deficit_ha=clean_num(row.get("rl_deficit_ha")),
             rl_balance_ha=clean_num(row.get("rl_balance_ha")),
             fmp_ha=clean_num(row.get("fmp_ha")),
-            historical_warnings=clean_str(row.get("historical_warnings"))
+            historical_warnings=clean_str(row.get("historical_warnings")),
+            is_liability_uncertain=clean_bool(row.get("is_liability_uncertain"))
         ),
         
         deforestation_metrics=DeforestationMetrics(
@@ -132,7 +141,14 @@ def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceRespon
             internal_risks_found=clean_str(row.get("internal_risks_found")),
             adjacency_details=clean_str(row.get("adjacency_details")),
             technical_evidence=clean_str(row.get("technical_evidence")),
-            max_adjacency_score=clean_num(row.get("max_adjacency_score"))
+            max_adjacency_score=clean_num(row.get("max_adjacency_score")),
+            city_data_source_origin=clean_str(row.get("city_data_source_origin")),
+            adjacent_roads=clean_str(row.get("adjacent_roads")),
+            # Novas evidências modulares
+            evidence_admin=clean_str(row.get("evidence_admin")),
+            evidence_social=clean_str(row.get("evidence_social")),
+            evidence_environmental=clean_str(row.get("evidence_environmental")),
+            evidence_infrastructure=clean_str(row.get("evidence_infrastructure"))
         ),
 
         geom_car_total=parse_complex_field(row.get("geom_car_total")),
@@ -141,7 +157,8 @@ def map_row_to_response(row: dict, reference_id: str = None) -> ComplianceRespon
         geom_eudr=parse_complex_field(row.get("geom_eudr")),
         geom_areas_protegidas=parse_complex_field(row.get("geom_areas_protegidas")),
         geom_assentamentos=parse_complex_field(row.get("geom_assentamentos")),
-        geom_conflito_app=parse_complex_field(row.get("geom_conflito_app"))
+        geom_conflito_app=parse_complex_field(row.get("geom_conflito_app")),
+        geom_adjacencia_risco=parse_complex_field(row.get("geom_adjacencia_risco"))
     )
 
 def build_compliance_query(where_clause: str) -> str:
@@ -155,7 +172,8 @@ def build_compliance_query(where_clause: str) -> str:
                 ANY_VALUE(CASE WHEN map_layer = 'RESTRICTION_EUDR' THEN ST_AsGeoJSON(geometry) END) AS geom_eudr,
                 ANY_VALUE(CASE WHEN map_layer = 'RESTRICTION_SOCIAL_ENVIRONMENTAL' THEN ST_AsGeoJSON(geometry) END) AS geom_areas_protegidas,
                 ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN ST_AsGeoJSON(geometry) END) AS geom_assentamentos,
-                ANY_VALUE(CASE WHEN map_layer = 'RESTRICTION_APP' THEN ST_AsGeoJSON(geometry) END) AS geom_conflito_app
+                ANY_VALUE(CASE WHEN map_layer = 'RESTRICTION_APP' THEN ST_AsGeoJSON(geometry) END) AS geom_conflito_app,
+                ANY_VALUE(CASE WHEN map_layer = 'ADJACENT_RISK_SOURCE' THEN ST_AsGeoJSON(geometry) END) AS geom_adjacencia_risco
             FROM {GEOMETRY_TABLE}
             GROUP BY property_id
         )
