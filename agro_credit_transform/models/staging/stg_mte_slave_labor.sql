@@ -5,7 +5,7 @@
 ) }}
 
 WITH source_data AS (
-    SELECT * FROM {{ source('raw_data', 'mte_slave_labor_history') }}
+    SELECT * FROM {{ source('raw_data', 'cadastro_trabalho_escravo') }}
 ),
 
 deduplicated AS (

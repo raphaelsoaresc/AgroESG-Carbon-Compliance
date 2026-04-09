@@ -212,3 +212,80 @@ sources:
           - name: wkt_geom_app
             description: "Polígono da zona de proteção da massa d'água (EPSG:4326)."
           - <<: *hash_control
+
+      - name: cadastro_trabalho_escravo
+        description: "Cadastro de Empregadores que tenham submetido trabalhadores a condições análogas à escravidão (Lista Suja atualizada)."
+        freshness: *compliance_freshness
+        loaded_at_field: ingested_at
+        columns:
+          - <<: *hash_control
+          - name: id
+            description: "ID sequencial do registro extraído do PDF."
+          - name: ano_da_acao_fiscal
+            description: "Ano em que a ação de fiscalização foi realizada."
+          - name: uf
+            description: "Unidade Federativa onde ocorreu a infração."
+          - name: empregador
+            description: "Nome do empregador ou Razão Social da empresa."
+          - name: cnpjcpf
+            description: "CNPJ ou CPF do empregador infrator."
+          - name: estabelecimento
+            description: "Localização ou nome do estabelecimento fiscalizado."
+          - name: trabalhadores_envolvidos
+            description: "Número de trabalhadores submetidos a condições análogas à escravidão."
+          - name: cnae
+            description: "Código Nacional de Atividade Econômica."
+          - name: decisao_administrativa_de_procedencia
+            description: "Data da decisão administrativa de procedência."
+          - name: inclusao_no_cadastro_de_empregadores
+            description: "Data de inclusão do empregador no cadastro."
+          - name: source_filename
+            description: "Nome do arquivo PDF de origem."
+          - name: ingested_at
+            description: "Timestamp da ingestão dos dados no BigQuery."
+
+            
+      - name: ibge_bc250_rodovias
+        description: "Malha rodoviária completa da BC250 com nomes e siglas."
+        columns:
+          - name: sigla
+            description: "Identificação da rodovia (ex: BR-163)."
+          - name: operacional
+            description: "Indica se a via existe ou é apenas projeto."
+          - <<: *hash_control
+
+      - name: ibge_bc250_pistas_pouso_l
+        description: "Geometrias de linhas de pistas de pouso e decolagem."
+        columns:
+          - name: homologacao
+            description: "Status de homologação da pista."
+          - name: usopista
+            description: "Tipo de uso (Privado, Público, Militar)."
+          - <<: *hash_control
+
+      - name: ibge_bc250_pistas_pouso_p
+        description: "Pontos de localização de pistas de pouso."
+        columns: *hash_control
+
+      - name: ibge_bc250_linhas_energia
+        description: "Trechos de linhas de transmissão de energia elétrica."
+        columns:
+          - name: largurafaixaservidao
+            description: "Largura da faixa de servidão do linhão."
+          - <<: *hash_control
+
+      - name: ibge_bc250_massas_agua
+        description: "Polígonos de massas d'água (Lagos, Represas, Baías)."
+        columns:
+          - name: artificial
+            description: "Indica se a massa d'água é uma represa/reservatório."
+          - <<: *hash_control
+
+      - name: ibge_bc250_rios_linhas
+        description: "Trechos de drenagem (Rios) com nomes e navegabilidade."
+        columns:
+          - name: nome
+            description: "Nome oficial do curso d'água."
+          - name: navegavel
+            description: "Indica se o trecho permite navegação."
+          - <<: *hash_control

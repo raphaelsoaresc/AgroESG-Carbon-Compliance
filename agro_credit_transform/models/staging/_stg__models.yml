@@ -277,3 +277,51 @@ models:
       - name: geometry_wkt
         data_tests:
           - not_null
+
+  - name: stg_ibge_bc250_pistas_pouso
+    description: "Pistas de pouso e aeródromos da base BC250."
+    columns:
+      - name: geometry
+        description: "Geometria da pista (LineString)."
+        data_tests:
+          - not_null
+      - name: is_operational
+        description: "Flag booleana indicando se a pista está operacional."
+        data_tests:
+          - not_null
+
+  - name: stg_ibge_bc250_linhas_energia
+    description: "Linhas de transmissão e distribuição de energia elétrica."
+    columns:
+      - name: geometry
+        description: "Geometria da linha de energia."
+        data_tests:
+          - not_null
+      - name: is_national_grid
+        description: "Indica se a linha pertence ao Sistema Interligado Nacional (SIN)."
+        data_tests:
+          - not_null
+
+  - name: stg_ibge_bc250_massas_agua
+    description: "Polígonos de massas d'água (lagos, represas, etc)."
+    columns:
+      - name: geometry
+        description: "Geometria do polígono da massa d'água."
+        data_tests:
+          - not_null
+      - name: is_man_made
+        description: "Indica se a massa d'água é artificial (reservatórios)."
+        data_tests:
+          - not_null
+
+  - name: stg_ibge_bc250_rios_linhas
+    description: "Trechos de drenagem e rios representados por linhas."
+    columns:
+      - name: geometry
+        description: "Geometria da linha do rio/trecho."
+        data_tests:
+          - not_null
+      - name: is_navigable
+        description: "Indica se o trecho é navegável."
+        data_tests:
+          - not_null
