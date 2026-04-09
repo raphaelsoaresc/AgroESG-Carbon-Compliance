@@ -18,10 +18,12 @@ WHERE
         )
         OR
         (
-            -- Caso 2: Se na origem é Pendente, não pode ser ELIGIBLE sem ressalvas
+            -- Caso 2: Se na origem é Pendente, não pode ser ELIGIBLE (puro ou concatenado)
             UPPER(TRIM(c.status_code)) IN ('PENDENTE', 'PE', 'P')
-            AND m.final_eligibility_status LIKE 'ELIGIBLE' -- Verifica se é exatamente ELIGIBLE (sem concatenação)
+            AND m.final_eligibility_status LIKE '%ELIGIBLE%'
+            AND m.final_eligibility_status NOT LIKE '%NOT ELIGIBLE%'
+            AND m.final_eligibility_status NOT LIKE '%MANUAL_REVIEW%'
         )
     )
-    -- Filtro global: Ignora produtores de identidade especial que possuem regras de exceção
+    -- Filtro global: Ignora produtores de identidade especial (exceções legais)
     AND m.final_eligibility_status NOT LIKE '%PRODUCER%'
