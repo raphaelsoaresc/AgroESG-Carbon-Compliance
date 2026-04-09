@@ -42,30 +42,52 @@ properties AS (
         p_meta.area_ha_original,
         p_meta.is_area_inconsistent,
         
-        o.municipio as city,
+        COALESCE(UPPER(TRIM(o.municipio)), UPPER(TRIM(p_meta.city))) as city,
+
+        -- Coluna de Rastreabilidade Forense (Objetivo do Caipora)
+        CASE 
+            WHEN o.municipio IS NOT NULL THEN 'ORIGINAL: BASE TEMAS AMBIENTAIS'
+            WHEN p_meta.city IS NOT NULL THEN 'RECUPERADO: BASE GEOMETRIA'
+            ELSE 'NÃO INFORMADO PELO GOVERNO'
+        END as city_data_source_origin,
+        
         UPPER(TRIM(COALESCE(o.uf, SUBSTR(p_meta.property_id, 1, 2)))) as uf_origem,
         o.solicitacao_adesao_pra,
         o.area_liquida as area_liquida_ha,
+
+        -- 1. Status Consolidado (Lógica Pessimista)
+        CASE 
+            WHEN UPPER(TRIM(p_meta.status_code)) IN ('CA', 'CANCELADO', 'C') 
+                 OR UPPER(TRIM(o.registration_status)) IN ('CA', 'CANCELADO', 'C') THEN 'CANCELADO'
+            
+            WHEN UPPER(TRIM(p_meta.status_code)) IN ('SU', 'SUSPENSO', 'S') 
+                 OR UPPER(TRIM(o.registration_status)) IN ('SU', 'SUSPENSO', 'S') THEN 'SUSPENSO'
+            
+            WHEN UPPER(TRIM(p_meta.status_code)) IN ('PE', 'PENDENTE', 'P') 
+                 OR UPPER(TRIM(o.registration_status)) IN ('PE', 'PENDENTE', 'P', 'EM ANALISE', 'ANALISE') THEN 'PENDENTE'
+            
+            WHEN UPPER(TRIM(p_meta.status_code)) IN ('AT', 'ATIVO', 'A', 'ANALISADO') 
+                 OR UPPER(TRIM(o.registration_status)) IN ('AT', 'ATIVO', 'A', 'ANALISADO', 'CCT', 'ANALISADO (COMPLETO)') THEN 'ATIVO'
+            
+            ELSE 'INCONSISTENTE'
+        END as registration_status,
+
+        -- 2. Status da Geometria (Normalizado para o Mart ler 'CANCELADO' e não 'CA')
         CASE 
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('CA', 'CANCELADO', 'C') THEN 'CANCELADO'
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('SU', 'SUSPENSO', 'S') THEN 'SUSPENSO'
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('PE', 'PENDENTE', 'P') THEN 'PENDENTE'
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('AT', 'ATIVO', 'A', 'ANALISADO') THEN 'ATIVO'
-            
-            WHEN UPPER(TRIM(o.registration_status)) IN ('CA', 'CANCELADO', 'C') THEN 'CANCELADO'
-            WHEN UPPER(TRIM(o.registration_status)) IN ('SU', 'SUSPENSO', 'S') THEN 'SUSPENSO'
-            WHEN UPPER(TRIM(o.registration_status)) IN ('PE', 'PENDENTE', 'P') THEN 'PENDENTE'
-            WHEN UPPER(TRIM(o.registration_status)) IN ('AT', 'ATIVO', 'A', 'ANALISADO', 'CCT', 'ANALISADO (COMPLETO)') THEN 'ATIVO'
-            
             ELSE 'INCONSISTENTE'
-        END as registration_status,
+        END as registration_status_geometry,
+
         g.geometry_raw as geometry,
         g.centroid,
         g.car_bbox,
         CASE WHEN g.geometry_raw IS NULL THEN TRUE ELSE FALSE END as is_missing_geometry,
         p_class.final_fiscal_modules as fiscal_modules,
         p_class.producer_size_category,
-        p_meta.status_code as registration_status_geometry,
+        -- A LINHA REPETIDA QUE ESTAVA AQUI FOI REMOVIDA
         p_class.is_small_holder,
         p_class.fmp_ha
     FROM p_meta_dedup p_meta

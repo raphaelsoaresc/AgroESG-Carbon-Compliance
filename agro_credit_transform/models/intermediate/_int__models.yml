@@ -241,3 +241,52 @@ models:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [property_id, neighbor_id]
     columns: *neighbor_columns
+
+  - name: int_infrastructure_features
+    description: "Base unificada de inteligência logística e infraestrutura (Rodovias, Pistas de Pouso, Energia e Hidrografia)."
+    columns:
+      - name: feature_id
+        data_tests:
+          - unique
+          - not_null
+      - name: feature_type
+        description: "Categoria macro da infraestrutura."
+        data_tests:
+          - accepted_values:
+              values: ['LOGISTICS', 'INFRASTRUCTURE', 'WATER_RESOURCE']
+      - name: feature_subtype
+        description: "Subtipo detalhado para análise de escoamento."
+        data_tests:
+          - accepted_values:
+              values: ['ROAD', 'AIRSTRIP', 'POWER_LINE', 'WATER_BODY', 'RIVER']
+      - name: geometry
+        description: "Geometria original bruta para precisão forense."
+        data_tests:
+          - not_null
+
+  - name: int_compliance__infrastructure_bridge
+    description: "Ponte de inteligência que conecta imóveis rurais a vetores logísticos e evidências de escoamento ilegal."
+    columns:
+      - name: property_id
+        description: "ID do imóvel (CAR). Único nesta tabela (agregado)."
+        data_tests:
+          - unique
+          - not_null
+      - name: logistics_risk_score
+        description: "Score de risco logístico (0-100+). Indica facilidade de escoamento e nexo causal."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: logistics_risk_level
+        description: "Classificação qualitativa do risco logístico."
+        data_tests:
+          - accepted_values:
+              values: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
+      - name: logistics_evidence_json
+        description: "Array JSON contendo todas as evidências, distâncias e nexo causal com crimes."
+        data_tests:
+          - not_null
+      - name: top_3_evidence_summary
+        description: "Resumo textual das principais evidências para o alerta rápido."
+        data_tests:
+          - not_null
