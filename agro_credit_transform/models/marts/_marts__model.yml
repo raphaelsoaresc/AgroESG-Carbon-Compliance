@@ -112,6 +112,7 @@ models:
                 - "WARNING - BORDERLINE SLOPE"
                 - "CONDITIONAL - RL REGULARIZATION"
                 - "MANUAL_REVIEW_REQUIRED - INCONSISTENT CAR STATUS"
+                - "MANUAL_REVIEW_REQUIRED - MISSING STATUS DATA"
                 - "MANUAL_REVIEW_REQUIRED - DATA SOURCE CONFLICT"
                 - "MANUAL_REVIEW_REQUIRED - PENDING STATE ANALYSIS"
                 - "MANUAL_REVIEW_REQUIRED - OUT OF SCOPE"
@@ -137,6 +138,7 @@ models:
                 - "NOT ELIGIBLE - APP DEFORESTATION (WATER)"
                 - "NOT ELIGIBLE - APP DEFORESTATION"
                 - "NOT ELIGIBLE - RL DEFICIT"
+                - "NOT ELIGIBLE - CLANDESTINE INFRASTRUCTURE"
 
   - name: fct_compliance_geometries_mart
     description: "Backend espacial otimizado para o mapa do frontend. Contém bordas de propriedades e camadas de restrição (Long Format)."
@@ -154,9 +156,11 @@ models:
                 - 'PROPERTY_BOUNDARY'
                 - 'RESTRICTION_EMBARGO'
                 - 'RESTRICTION_DEFORESTATION'
+                - 'RESTRICTION_EUDR'                # <--- ADICIONADO
                 - 'RESTRICTION_SOCIAL_ENVIRONMENTAL'
                 - 'RESTRICTION_APP'
                 - 'RESTRICTION_OTHERS'
+                - 'ADJACENT_RISK_SOURCE'            # <--- ADICIONADO
 
       - name: geometry
         description: "Geometria simplificada para renderização web."
@@ -179,3 +183,79 @@ models:
       - name: final_eligibility_status
         data_tests:
           - not_null
+
+  - name: fct_social_impact_slave_labor
+    description: "Dossiê de inteligência para resgate e fiscalização de Trabalho Escravo. Foca em isolamento geográfico e vetores de fuga."
+    data_tests:
+      # Teste atualizado para os novos nomes de coluna
+      - dbt_utils.expression_is_true:
+          expression: "NOT (risk_level LIKE 'CRÍTICO%' AND inteligencia_aerea NOT LIKE '%PISTA%')"
+          name: "check_slave_labor_airstrip_evidence"
+      
+      - dbt_utils.expression_is_true:
+          expression: "casos_trabalho_escravo_no_mesmo_grid >= 1"
+          name: "check_slave_labor_grid_density_positive"
+
+    columns:
+      - name: property_id
+        data_tests:
+          - unique
+          - not_null
+      - name: infrator_identificado
+        data_tests:
+          - not_null
+      - name: risk_level
+        description: "Nível de risco operacional baseado em logística de fuga e isolamento."
+        data_tests:
+          - accepted_values:
+              values: [
+                'CRÍTICO: Cárcere com Pista Clandestina',
+                'CRÍTICO: Vetor de Fuga Aéreo Interno', 
+                'CRÍTICO: Isolamento Geográfico (Acesso apenas por Rio)', 
+                'ALTO: Isolamento Geográfico Total', 
+                'PADRÃO'
+              ]
+      - name: inteligencia_aerea
+        data_tests:
+          - not_null
+      - name: inteligencia_rodoviaria
+        data_tests:
+          - not_null
+
+  - name: fct_territorial_invasion_forensics
+    description: "Análise forense de invasões em áreas protegidas com identificação de nexo causal logístico."
+    data_tests:
+      # Teste de Limite Físico: Área de invasão não pode ser maior que a área total do imóvel
+      - dbt_utils.expression_is_true:
+          expression: "area_invasao_ha <= (area_total_imovel_ha + 0.01)"
+          name: "check_invasion_physical_limit"
+      
+      # Se houver nexo causal logístico, a severidade deve refletir isso em casos críticos
+      - dbt_utils.expression_is_true:
+          expression: "NOT (nexo_causal_logistico IS TRUE AND area_invasao_ha > 1000 AND severidade_forense NOT LIKE '%Estruturada%')"
+          name: "check_invasion_structural_nexus_severity"
+
+    columns:
+      - name: recibo_car_real
+        data_tests:
+          - not_null
+      - name: severidade_forense
+        description: "Classificação da gravidade da invasão baseada em área, status do CAR e logística."
+        data_tests:
+          - accepted_values:
+              values: [
+                'CRÍTICO: Mega-Invasão Estruturada (Nexo Logístico)', 
+                'CRÍTICO: Mega-Invasão Ativa', 
+                'CRÍTICO: CAR de Prateleira (Sobreposição Total)', 
+                'ALTO: Invasão com Apoio Aéreo', 
+                'ALTO: Mega-Invasão (Status Irregular)', 
+                'ALTO: Invasão Parcial'
+              ]
+      - name: nexo_causal_logistico
+        description: "Flag booleana indicando se a infraestrutura serve diretamente à área invadida."
+        data_tests:
+          - not_null
+      - name: area_invasao_ha
+        data_tests:
+          - dbt_utils.expression_is_true:
+              expression: "> 0.5" # Filtro de ruído definido no SQL

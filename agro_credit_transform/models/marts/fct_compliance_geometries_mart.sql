@@ -9,15 +9,34 @@
 WITH metadata AS (
     SELECT 
         UPPER(TRIM(property_id)) as property_id,
+        city,
+        city_data_source_origin, 
         final_eligibility_status,
+        data_reliability_index,
+        estimated_financial_liability_brl,
+        forensic_summary,
+        internal_risks_found,
         uf_origem,
-        -- Flags de Identidade (Regra Máxima: Não alterar nomes)
         is_settlement_identity,
         is_traditional_identity,
         is_quilombo_identity,
-        -- NOVO: Adicionado para permitir que o mapa mude a cor da borda em caso de risco de vizinho
         max_adjacency_score 
     FROM {{ ref('fct_compliance_risk') }}
+),
+
+risky_neighbor_links AS (
+    SELECT 
+        nb.property_id, 
+        nb.neighbor_id, 
+        f_neighbor.property_alias as neighbor_alias,
+        f_neighbor.final_eligibility_status as neighbor_status,
+        f_neighbor.internal_risks_found as neighbor_risks,
+        nb.distance_meters,
+        nb.connected_road_name
+    FROM {{ ref('int_compliance__neighbor_barriers') }} nb
+    INNER JOIN {{ ref('fct_compliance_risk') }} f_neighbor 
+        ON nb.neighbor_id = f_neighbor.property_id
+    WHERE f_neighbor.is_technically_blocked = TRUE 
 ),
 
 shapes_unioned AS (
@@ -26,7 +45,8 @@ shapes_unioned AS (
         UPPER(TRIM(property_id)) as property_id,
         'PROPERTY_BOUNDARY' as map_layer,
         'CAR_TOTAL' as target_type,
-        ST_SIMPLIFY(geometry_raw, 0.0001) as geom 
+        CAST(NULL AS STRING) as info_context,
+        ST_SIMPLIFY(geometry_raw, 0.0001) as geom
     FROM {{ ref('int_car_geometries') }}
     
     UNION ALL
@@ -37,27 +57,44 @@ shapes_unioned AS (
         CASE 
             WHEN target_type = 'RECORTE_EMBARGO' THEN 'RESTRICTION_EMBARGO'
             WHEN target_type = 'RECORTE_DESMATAMENTO_MAPBIOMAS' THEN 'RESTRICTION_DEFORESTATION'
-            -- REFINO: Camada específica para EUDR (ajuda na cor diferenciada no mapa)
             WHEN target_type = 'RECORTE_DESMATAMENTO_EUDR' THEN 'RESTRICTION_EUDR'
             WHEN target_type LIKE 'RECORTE_INVASAO_%' THEN 'RESTRICTION_SOCIAL_ENVIRONMENTAL'
             WHEN target_type LIKE 'RECORTE_DESMATAMENTO_EM_APP%' THEN 'RESTRICTION_APP'
             ELSE 'RESTRICTION_OTHERS'
         END as map_layer,
         target_type,
+        CAST(NULL AS STRING) as info_context,
         ST_SIMPLIFY(geometry, 0.0001) as geom
     FROM {{ ref('int_compliance_forensic_shapes') }}
     WHERE target_type NOT IN ('CAR_TOTAL', 'SIGEF_TOTAL')
+
+    UNION ALL
+
+    -- 3. Geometria dos Vizinhos de Risco (Contexto de Adjacência)
+    SELECT 
+        UPPER(TRIM(lnk.property_id)) as property_id, 
+        'ADJACENT_RISK_SOURCE' as map_layer,
+        'NEIGHBOR_BOUNDARY' as target_type,
+        CONCAT('Vizinho: ', lnk.neighbor_alias, ' | Status: ', lnk.neighbor_status, ' | Riscos: ', lnk.neighbor_risks) as info_context,
+        ST_SIMPLIFY(g.geometry_raw, 0.0001) as geom
+    FROM risky_neighbor_links lnk
+    INNER JOIN {{ ref('int_car_geometries') }} g ON lnk.neighbor_id = g.property_id
 )
 
 SELECT
     s.property_id,
+    m.city,
+    m.city_data_source_origin, 
     s.map_layer,
     s.target_type,
+    s.info_context,
     m.final_eligibility_status,
     m.uf_origem,
-    -- NOVO: Disponibiliza o score de adjacência para o estilo do mapa (ex: borda laranja)
+    m.data_reliability_index,
+    m.estimated_financial_liability_brl,
+    m.forensic_summary,
+    m.internal_risks_found,
     m.max_adjacency_score,
-    -- Cálculo de Bounding Box original para zoom automático
     (ST_BOUNDINGBOX(s.geom)).xmin as xmin,
     (ST_BOUNDINGBOX(s.geom)).ymin as ymin,
     (ST_BOUNDINGBOX(s.geom)).xmax as xmax,
@@ -68,7 +105,6 @@ FROM shapes_unioned s
 INNER JOIN metadata m ON s.property_id = m.property_id
 WHERE s.geom IS NOT NULL 
   AND NOT ST_ISEMPTY(s.geom)
-  -- LÓGICA DE COMPLIANCE VISUAL ORIGINAL (Preservada integralmente)
   AND NOT (s.target_type = 'RECORTE_INVASAO_ASSENTAMENTO' AND m.is_settlement_identity)
   AND NOT (s.target_type = 'RECORTE_INVASAO_QUILOMBO' AND m.is_quilombo_identity)
   AND NOT (s.target_type = 'RECORTE_INVASAO_TI' AND m.is_traditional_identity)
