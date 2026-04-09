@@ -1,19 +1,53 @@
-// types.ts
-
+// types.ts - VERSÃO FINAL SINCRONIZADA
 export interface AuditData {
-  status: string;
-  analysisReason: string;
+  // Identificação e Localização
+  propertyId: string;
+  propertyAlias?: string;
+  carNumber: string; // Adicionado para resolver o erro ts(2353)
+  area: number;      // Adicionado
+  areaHa: number;
+  propertyAreaHa: number;
+  city: string;
+  uf: string;
+  latitude: number;
+  longitude: number;
+  carBbox: any;
+  mapCenterCoords: [number, number];
+
+  // Perícia Física e Identidades
+  maxSlopeDegrees: number;
+  relief: string;
+  isSettlementIdentity: boolean;
+  isTraditionalIdentity: boolean;
+  isQuilomboIdentity: boolean;
+  isTiIdentity: boolean;
+  isUcIdentity: boolean;
+  isSmallHolder: boolean;
+  producerSizeCategory: string;
+
+  // Status e Elegibilidade
+  status: string; 
+  statusDetailed: string;
+  finalEligibilityStatus: string;         // Adicionado
+  finalEligibilityStatusDetailed: string; // Adicionado
   carStatus: string;
+  isTechnicallyBlocked: boolean;
+  confidenceLevel: string;
+  geospatialConfidenceLevel: string;
+  dataReliabilityIndex: number;
+  forensicSummary: string;
+  analysisReason: string;
   processedAt: string;
   analyzedAt: string;
-  mapbiomasUrl: string | null;
-  relief: string;
-  carNumber: string;
-  uf: string;
-  city: string;
-  area: number;
-  
-  // Financeiro
+
+  // Sub-objetos Brutos da API
+  financialLiabilities: any;
+  environmentalScore: any;
+  deforestationMetrics: any;
+  socialScore: any;
+  riskAnalysis: any;
+
+  // Passivos Formatados (UI)
   liabilityTotal: string;
   liabilityAmbientalTotal: string;
   liabilityDeforestation: string;
@@ -23,38 +57,51 @@ export interface AuditData {
   liabilityAPP: string;
   liabilityEmbargo: string;
   
-  // Conteúdo
-  evidenceList: string[];
-  metrics: string;
-  color: 'red' | 'orange' | 'green' | 'blue';
-  isCensored: boolean;
-  confidenceLevel: string;
-  
-  // Novos campos de Inteligência
-  isTechnicallyBlocked: boolean;
-  producerSizeCategory: string;
-  internalRisks?: string;
+  // Ambiental e Risco
+  biomeName?: string;
+  rlStatus?: string;
+  isLiabilityUncertain: boolean;
   historicalWarnings?: string;
   embargoProcesses?: string;
   embargoOffenders?: string;
+  mapbiomasUrl: string | null;
+  mapbiomasAlertIds?: string;
+  liabilityDeforestationHa?: number; // Adicionado
+  maxAdjacencyScore: number;
+  adjacentRoads?: string;
+  cityDataSourceOrigin?: string;
 
-  // Geometrias
-  mapCenterCoords: [number, number];
+  // Gavetas de Evidências
+  evidenceList: string[];
+  evidenceAdmin?: string;
+  evidenceSocial?: string;
+  evidenceEnvironmental?: string;
+  evidenceInfrastructure?: string;
+  internalRisks?: string;
+  
+  // UI e Mapa
+  metrics: string;
+  color: 'red' | 'orange' | 'green' | 'blue';
+  isCensored: boolean;
+
+  // Geometrias (GeoJSON)
   geometry: any;
+  geom_car_total?: any;
   geom_embargos?: any;
   geom_desmatamento?: any;
+  geom_eudr?: any;
   geom_areas_protegidas?: any;
   geom_conflito_app?: any;
   geom_assentamentos?: any;
+  geom_adjacencia_risco?: any;
 }
 
-// Interface para o retorno do Hook useAudit
 export interface UseAuditReturn {
   isAdmin: boolean;
   logout: () => void;
   carId: string;
   setCarId: (id: string) => void;
-  performSearch: (id?: string) => Promise<void>;
+  performSearch: (id: string) => Promise<void>;
   searchCount: number;
   data: AuditData | null;
   loading: boolean;
@@ -64,7 +111,6 @@ export interface UseAuditReturn {
   handleUnlockReport: () => void;
 }
 
-// Interface para as Props do componente Header
 export interface HeaderProps {
   carId: string;
   setCarId: (id: string) => void;
