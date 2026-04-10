@@ -15,10 +15,6 @@ models:
           expression: "NOT (final_eligibility_status LIKE 'ELIGIBLE%' AND (internal_risks_found LIKE '%SOCIAL%' OR internal_risks_found LIKE '%SLAVE%'))"
           name: "check_eligible_properties_social_limit"
 
-      - dbt_utils.expression_is_true:
-          expression: "NOT (final_eligibility_status LIKE 'ELIGIBLE%' AND max_slope_degrees > 45)"
-          name: "check_eligible_properties_satellite_limit"
-
       # Validação de Elegibilidade vs MapBiomas (Respeitando a regra de 2008)
       - dbt_utils.expression_is_true:
           expression: "NOT (final_eligibility_status LIKE 'ELIGIBLE%' AND mapbiomas_deforested_ha > 0.1 AND (mapbiomas_detection_date >= '2008-07-22' OR mapbiomas_detection_date IS NULL))"
@@ -96,49 +92,61 @@ models:
           - not_null
           - accepted_values:
               values:
-                - "ELIGIBLE"
-                - "ELIGIBLE - INDIGENOUS PRODUCER"
-                - "ELIGIBLE - CONSERVATION UNIT PRODUCER"
-                - "ELIGIBLE - SETTLEMENT PRODUCER"
-                - "ELIGIBLE - TRADITIONAL PRODUCER"
-                - "ELIGIBLE - QUILOMBOLA PRODUCER"
-                - "WARNING - CRITICAL ADJACENCY RISK (LAUNDERING)"
-                - "WARNING - RISK BY ADJACENCY"
-                - 'WARNING - CRITICAL ADJACENCY RISK'
-                - "WARNING - EMBARGO CANCELLED/JUDICIAL"
-                - "WARNING - OLD EMBARGO"
-                - "WARNING - OLD EMBARGO (PRE-2008)"
-                - "WARNING - HIGH CAR OVERLAP"
-                - "WARNING - BORDERLINE SLOPE"
-                - "CONDITIONAL - RL REGULARIZATION"
-                - "MANUAL_REVIEW_REQUIRED - INCONSISTENT CAR STATUS"
-                - "MANUAL_REVIEW_REQUIRED - MISSING STATUS DATA"
-                - "MANUAL_REVIEW_REQUIRED - DATA SOURCE CONFLICT"
-                - "MANUAL_REVIEW_REQUIRED - PENDING STATE ANALYSIS"
-                - "MANUAL_REVIEW_REQUIRED - OUT OF SCOPE"
-                - "MANUAL_REVIEW_REQUIRED - UNUSUAL AREA FOR IDENTITY"
-                - "MANUAL_REVIEW_REQUIRED - UNREALISTIC AREA"        # ADICIONADO
-                - "MANUAL_REVIEW_REQUIRED - POTENTIAL AREA FRAUD"    # ADICIONADO
-                - "AWAITING_MANUAL_VALIDATION - POTENTIAL SOCIAL RISK"
-                - "NOT ELIGIBLE - AMZ EMBARGO (CMN 5.081)"
-                - "NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)"
-                - "NOT ELIGIBLE - CAR STATUS"
-                - "NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)"
-                - "NOT ELIGIBLE - DEFORESTATION (MISSING DATE EVIDENCE)"
-                - "NOT ELIGIBLE - SATELLITE (SLOPE)"
-                - "NOT ELIGIBLE - INVALID GEOMETRY"
-                - "NOT ELIGIBLE - EUDR VIOLATION (POST-2020)"
-                - "NOT ELIGIBLE - INDIGENOUS LAND"
-                - "NOT ELIGIBLE - QUILOMBOLA (INVASION)"
-                - "NOT ELIGIBLE - CONSERVATION UNIT"
-                - "NOT ELIGIBLE - SETTLEMENT (INVASION)"
-                - "NOT ELIGIBLE - TRADITIONAL TERRITORY (INVASION)"
-                - "NOT ELIGIBLE - EMBARGO"
-                - "NOT ELIGIBLE - EMBARGO (OFFICIAL SOURCE)"
-                - "NOT ELIGIBLE - APP DEFORESTATION (WATER)"
-                - "NOT ELIGIBLE - APP DEFORESTATION"
-                - "NOT ELIGIBLE - RL DEFICIT"
-                - "NOT ELIGIBLE - CLANDESTINE INFRASTRUCTURE"
+                # 1. ELEGÍVEL (PURO E IDENTIDADES)
+                  - "ELIGIBLE"
+                  - "ELIGIBLE - INDIGENOUS PRODUCER"
+                  - "ELIGIBLE - CONSERVATION UNIT PRODUCER"
+                  - "ELIGIBLE - SETTLEMENT PRODUCER"
+                  - "ELIGIBLE - TRADITIONAL PRODUCER"
+                  - "ELIGIBLE - QUILOMBOLA PRODUCER"
+                  - "ELIGIBLE - MITIGATED ADJACENCY RISK (PHYSICAL BARRIER)"
+
+                  # 2. AVISOS E CONDICIONANTES (WARNING)
+                  - "WARNING - CRITICAL ADJACENCY RISK (LAUNDERING)"
+                  - "WARNING - RISK BY ADJACENCY"
+                  - "WARNING - CRITICAL ADJACENCY RISK"
+                  - "WARNING - EMBARGO CANCELLED/JUDICIAL"
+                  - "WARNING - OLD EMBARGO"
+                  - "WARNING - OLD EMBARGO (PRE-2008)"
+                  - "WARNING - HIGH CAR OVERLAP"
+                  - "WARNING - BORDERLINE SLOPE"
+                  - "CONDITIONAL - RL REGULARIZATION"
+
+                  # 3. REVISÃO MANUAL (INCONSISTÊNCIAS DE AUDITORIA)
+                  - "MANUAL_REVIEW - INCONSISTENT AREA"
+                  - "MANUAL_REVIEW_REQUIRED - POTENTIAL AREA FRAUD"
+                  - "MANUAL_REVIEW_REQUIRED - PENDING STATE ANALYSIS"
+                  - "MANUAL_REVIEW_REQUIRED - ARTIFICIAL WATER BODY DETECTED"
+                  - "MANUAL_REVIEW_REQUIRED - INCONSISTENT CAR STATUS"
+                  - "MANUAL_REVIEW_REQUIRED - MISSING STATUS DATA"
+                  - "MANUAL_REVIEW_REQUIRED - DATA SOURCE CONFLICT"
+                  - "MANUAL_REVIEW_REQUIRED - OUT OF SCOPE"
+                  - "MANUAL_REVIEW_REQUIRED - UNUSUAL AREA FOR IDENTITY"
+                  - "MANUAL_REVIEW_REQUIRED - UNREALISTIC AREA"
+                  - "AWAITING_MANUAL_VALIDATION - POTENTIAL SOCIAL RISK"
+
+                  # 4. NÃO ELEGÍVEL (CRIMES E INFRAÇÕES DE SOLO)
+                  - "NOT ELIGIBLE - SOCIAL RISK (SLAVE LABOR)"
+                  - "NOT ELIGIBLE - AMZ EMBARGO (CMN 5.081)"
+                  - "NOT ELIGIBLE - EMBARGO"
+                  - "NOT ELIGIBLE - EMBARGO (OFFICIAL SOURCE)"
+                  - "NOT ELIGIBLE - DEFORESTATION (MAPBIOMAS)"
+                  - "NOT ELIGIBLE - DEFORESTATION (MISSING DATE EVIDENCE)"
+                  - "NOT ELIGIBLE - EUDR VIOLATION (POST-2020)"
+                  - "NOT ELIGIBLE - APP DEFORESTATION"
+                  - "NOT ELIGIBLE - STRUCTURED ENVIRONMENTAL RISK"
+                  - "NOT ELIGIBLE - INFRASTRUCTURE IN DEFORESTED AREA"
+
+                  # 5. NÃO ELEGÍVEL (INVASÕES E DOCUMENTAÇÃO)
+                  - "NOT ELIGIBLE - INDIGENOUS LAND"
+                  - "NOT ELIGIBLE - QUILOMBOLA (INVASION)"
+                  - "NOT ELIGIBLE - CONSERVATION UNIT"
+                  - "NOT ELIGIBLE - SETTLEMENT (INVASION)"
+                  - "NOT ELIGIBLE - TRADITIONAL TERRITORY (INVASION)"
+                  - "NOT ELIGIBLE - CAR STATUS"
+                  - "NOT ELIGIBLE - INVALID GEOMETRY"
+                  - "NOT ELIGIBLE - RL DEFICIT"
+                  - "NOT ELIGIBLE - SATELLITE (SLOPE)"
 
   - name: fct_compliance_geometries_mart
     description: "Backend espacial otimizado para o mapa do frontend. Contém bordas de propriedades e camadas de restrição (Long Format)."

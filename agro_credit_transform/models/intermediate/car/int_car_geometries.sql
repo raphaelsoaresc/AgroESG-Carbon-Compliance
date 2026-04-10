@@ -7,7 +7,7 @@
 
 WITH staging_data AS (
     SELECT 
-        property_id,
+        UPPER(TRIM(property_id)) as property_id,
         -- Novas colunas vindas da staging refatorada
         area_ha_original,
         area_ha_ajustada,

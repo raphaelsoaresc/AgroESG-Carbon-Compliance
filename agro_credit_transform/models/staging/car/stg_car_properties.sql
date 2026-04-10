@@ -17,7 +17,7 @@ WITH source_data AS (
 renamed_and_filtered AS (
     SELECT
         -- Identifiers
-        cod_imovel as property_id,
+        UPPER(TRIM(cod_imovel)) as property_id,
         
         -- LÓGICA DE ÁREA REVISADA
         SAFE_CAST(num_area AS FLOAT64) as area_ha_original,

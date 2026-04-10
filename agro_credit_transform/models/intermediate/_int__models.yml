@@ -158,7 +158,7 @@ models:
           - not_null
 
   - name: int_brazil_reference_geometries
-    description: "Base unificada de restrições territoriais e infraestrutura (Biomas, TIs, UCs, Quilombos, Assentamentos, APPs e Rodovias)."
+    description: "Base unificada de restrições territoriais e infraestrutura (Biomas, TIs, UCs, Quilombos, Assentamentos, APPs, Rodovias e Hidrografia)."
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
@@ -169,11 +169,22 @@ models:
         description: "Tipo da geometria (Ex: APP_ZONE para barreiras, INFRASTRUCTURE para vetores logísticos)."
         data_tests:
           - accepted_values:
-              values: ['BIOME', 'INDIGENOUS_LAND', 'APP_ZONE', 'QUILOMBOLA', 'CONSERVATION_UNIT', 'SETTLEMENT', 'INFRASTRUCTURE']
+              values: [
+                'BIOME', 
+                'INDIGENOUS_LAND', 
+                'APP_ZONE', 
+                'QUILOMBOLA', 
+                'CONSERVATION_UNIT', 
+                'SETTLEMENT', 
+                'INFRASTRUCTURE',
+                'WATER_BODY_FEATURE' # <-- Novo valor adicionado aqui
+              ]
       - name: restriction_subtype
-        description: "Subtipo detalhado (Ex: RIVER, WATER_BODY, ROAD)."
+        description: "Subtipo detalhado (Ex: RIVER, WATER_BODY, ROAD, POWER_LINE)."
         data_tests:
           - not_null
+      - name: is_man_made
+        description: "Flag que identifica se a feição é artificial (ex: represas, canais, linhões)."
       - name: geometry
         data_tests:
           - not_null

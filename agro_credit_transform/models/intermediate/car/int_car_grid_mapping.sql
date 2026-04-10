@@ -7,7 +7,7 @@
 
 WITH base_geometries AS (
     SELECT 
-        property_id,
+        UPPER(TRIM(property_id)) as property_id,
         centroid
     FROM {{ ref('int_car_geometries') }}
     -- Garantir que não tentamos processar fazendas sem geometria válida

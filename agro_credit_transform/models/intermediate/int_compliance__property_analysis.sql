@@ -1,5 +1,6 @@
 {{ config(
     materialized='table',
+    schema='agro_esg_intermediate',
     cluster_by=['property_id', 'uf_origem']
 ) }}
 
@@ -17,7 +18,6 @@ WITH legal_params AS (
     FROM {{ ref('legal_parameters') }}
 ),
 
--- CTE para garantir que cada property_id seja ÚNICO e com o status mais restritivo
 p_meta_dedup AS (
     SELECT * FROM (
         SELECT 
@@ -44,7 +44,6 @@ properties AS (
         
         COALESCE(UPPER(TRIM(o.municipio)), UPPER(TRIM(p_meta.city))) as city,
 
-        -- Coluna de Rastreabilidade Forense (Objetivo do Caipora)
         CASE 
             WHEN o.municipio IS NOT NULL THEN 'ORIGINAL: BASE TEMAS AMBIENTAIS'
             WHEN p_meta.city IS NOT NULL THEN 'RECUPERADO: BASE GEOMETRIA'
@@ -55,7 +54,6 @@ properties AS (
         o.solicitacao_adesao_pra,
         o.area_liquida as area_liquida_ha,
 
-        -- 1. Status Consolidado (Lógica Pessimista)
         CASE 
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('CA', 'CANCELADO', 'C') 
                  OR UPPER(TRIM(o.registration_status)) IN ('CA', 'CANCELADO', 'C') THEN 'CANCELADO'
@@ -72,7 +70,6 @@ properties AS (
             ELSE 'INCONSISTENTE'
         END as registration_status,
 
-        -- 2. Status da Geometria (Normalizado para o Mart ler 'CANCELADO' e não 'CA')
         CASE 
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('CA', 'CANCELADO', 'C') THEN 'CANCELADO'
             WHEN UPPER(TRIM(p_meta.status_code)) IN ('SU', 'SUSPENSO', 'S') THEN 'SUSPENSO'
@@ -87,7 +84,6 @@ properties AS (
         CASE WHEN g.geometry_raw IS NULL THEN TRUE ELSE FALSE END as is_missing_geometry,
         p_class.final_fiscal_modules as fiscal_modules,
         p_class.producer_size_category,
-        -- A LINHA REPETIDA QUE ESTAVA AQUI FOI REMOVIDA
         p_class.is_small_holder,
         p_class.fmp_ha
     FROM p_meta_dedup p_meta
@@ -158,7 +154,6 @@ embargo_check AS (
     FROM {{ ref('int_property_embargo_overlap') }}
 ),
 
-
 mapbiomas_check AS (
     SELECT
         UPPER(TRIM(car_code)) as property_id,
@@ -211,7 +206,13 @@ full_context AS (
         COALESCE(p.property_type = 'TI' OR f.ti_overlap_pct > 90, FALSE) as is_ti_identity,
         f.settlement_name, f.traditional_name, f.ti_name, f.uc_name, f.quilombo_name,
         COALESCE(so.overlap_pct, 0) as car_on_car_overlap_pct,
-        COALESCE(so.total_overlapping_cars, 0) as total_overlapping_cars
+        COALESCE(so.total_overlapping_cars, 0) as total_overlapping_cars,
+        
+        COALESCE(water.count_artificial_water_bodies, 0) as count_artificial_water_bodies,
+        water.artificial_water_details,
+        log.logistics_risk_level,
+        log.logistics_risk_score
+
     FROM properties p
     CROSS JOIN legal_params lp
     LEFT JOIN forensic_areas f ON p.property_id = f.property_id
@@ -224,15 +225,25 @@ full_context AS (
         SELECT property_id, MAX(overlap_pct) as overlap_pct, COUNT(*) as total_overlapping_cars 
         FROM {{ ref('int_car_self_overlap') }} GROUP BY 1
     ) so ON p.property_id = so.property_id
+    LEFT JOIN {{ ref('int_property_water_anomalies') }} water ON p.property_id = water.property_id
+    LEFT JOIN {{ ref('int_compliance__infrastructure_bridge') }} log ON p.property_id = log.property_id
 ),
 
-analysis AS (
+metrics_refinement AS (
     SELECT
         *,
         LEAST(COALESCE(protected_area_overlap_ha_raw, 0), area_ha) as protected_area_fixed_ha,
         LEAST(COALESCE(mapbiomas_deforested_ha_raw, 0), area_ha) as defo_fixed_ha,
         LEAST(COALESCE(embargo_area_ha_raw, 0), area_ha) as embargo_fixed_ha,
-        LEAST(COALESCE(road_overlap_ha_raw, 0), area_ha) as road_fixed_ha,
+        LEAST(COALESCE(road_overlap_ha_raw, 0), area_ha) as road_fixed_ha
+    FROM full_context
+),
+
+analysis AS (
+    SELECT
+        *,
+        ( (embargo_area_ha_raw > 0.1 OR mapbiomas_deforested_ha_raw > 0.1) 
+          AND logistics_risk_level IN ('CRITICAL', 'HIGH') ) as is_structured_environmental_risk,
 
         COALESCE(
             (
@@ -246,7 +257,7 @@ analysis AS (
                 (forensic_app_hidrica_ha > {{ var('gis_noise_ha_threshold') }}) OR 
                 (app_deforested_ha_forensic > {{ var('gis_noise_ha_threshold') }}) OR 
                 (eudr_deforested_ha > {{ var('gis_noise_ha_threshold') }}) OR 
-                (max_slope_degrees > 45) OR 
+                (road_fixed_ha > {{ var('gis_noise_ha_threshold') }}) OR
                 (rl_deficit_ha > 0.01 AND is_small_holder IS FALSE AND (solicitacao_adesao_pra IS NULL OR solicitacao_adesao_pra != 'Sim')) OR
                 (EXISTS(SELECT 1 FROM UNNEST(embargo_sources) AS s WHERE s IN ('IBAMA', 'SEMA_MT', 'SIGA_MT', 'ICMBIO')))
                 OR 
@@ -257,18 +268,19 @@ analysis AS (
                     (forensic_settlement_ha > {{ var('gis_noise_ha_threshold') }} AND COALESCE(is_settlement_identity, FALSE) IS FALSE) OR
                     (forensic_traditional_ha > {{ var('gis_noise_ha_threshold') }} AND COALESCE(is_traditional_identity, FALSE) IS FALSE)
                 )
+                OR (logistics_risk_level = 'CRITICAL' AND (embargo_area_ha_raw > 0 OR mapbiomas_deforested_ha_raw > 0))
             ), FALSE
         ) as is_technically_blocked
-    FROM full_context
+    FROM metrics_refinement
 ),
 
--- NOVA CTE PARA RESOLVER O ERRO DE NOME NÃO RECONHECIDO
 final_eligibility_check AS (
     SELECT
         *,
         CASE 
             WHEN is_area_inconsistent THEN 'MANUAL_REVIEW - INCONSISTENT AREA'
             WHEN is_technically_blocked THEN 'BLOCKED'
+            WHEN count_artificial_water_bodies > 0 AND biome_name LIKE 'AMAZ%NIA' THEN 'MANUAL_REVIEW - UNLICENSED WATER ALTERATION'
             ELSE 'ELIGIBLE'
         END as eligibility_status
     FROM analysis

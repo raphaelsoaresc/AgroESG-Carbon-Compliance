@@ -16,6 +16,7 @@ WITH biomes AS (
             ELSE 0.20 
         END as legal_reserve_perc,
         FALSE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made, -- Nova coluna
         2 as priority_level,
         SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
         file_hash, 
@@ -31,6 +32,7 @@ indigenous AS (
         stage_name as restriction_subtype,
         NULL as legal_reserve_perc, 
         TRUE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made,
         1 as priority_level,
         SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
         file_hash, 
@@ -38,7 +40,6 @@ indigenous AS (
     FROM {{ ref('stg_funai_indigenous_lands') }}
 ),
 
--- NOVA HIDROGRAFIA (RIOS) - BARREIRA FÍSICA E APP
 app_rivers AS (
     SELECT 
         CONCAT('ANA_', CAST(basin_code AS STRING)) as restriction_id, 
@@ -47,6 +48,7 @@ app_rivers AS (
         'RIVER' as restriction_subtype,
         NULL as legal_reserve_perc, 
         TRUE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made,
         1 as priority_level,
         SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
         file_hash, 
@@ -54,7 +56,6 @@ app_rivers AS (
     FROM {{ ref('stg_ana__rios_app') }}
 ),
 
--- NOVA HIDROGRAFIA (MASSAS D'ÁGUA) - BARREIRA FÍSICA E APP
 app_lakes AS (
     SELECT 
         CONCAT('WATER_', CAST(water_body_id AS STRING)) as restriction_id, 
@@ -63,6 +64,7 @@ app_lakes AS (
         'WATER_BODY' as restriction_subtype,
         NULL as legal_reserve_perc, 
         TRUE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made,
         1 as priority_level,
         SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
         file_hash, 
@@ -70,7 +72,6 @@ app_lakes AS (
     FROM {{ ref('stg_ibge__massas_agua_app') }}
 ),
 
--- NOVA INFRAESTRUTURA (RODOVIAS) - VETOR DE RISCO / LAVAGEM DE GRÃOS
 risk_roads AS (
     SELECT 
         CONCAT('ROAD_', CAST(road_id AS STRING)) as restriction_id, 
@@ -78,12 +79,47 @@ risk_roads AS (
         'INFRASTRUCTURE' as restriction_type, 
         'ROAD' as restriction_subtype,
         NULL as legal_reserve_perc, 
-        FALSE as is_hard_block, -- Rodovia não bloqueia, ela sinaliza risco
+        FALSE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made,
         3 as priority_level,
         SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
         file_hash, 
         ingested_at
     FROM {{ ref('stg_ibge__rodovias_risco') }}
+),
+
+-- NOVA CAMADA: LINHAS DE ENERGIA (VETOR DE CONECTIVIDADE)
+power_lines AS (
+    SELECT 
+        CONCAT('POWER_', CAST(ABS(FARM_FINGERPRINT(ST_ASBINARY(geometry))) AS STRING)) as restriction_id, 
+        line_name as restriction_name,
+        'INFRASTRUCTURE' as restriction_type, 
+        'POWER_LINE' as restriction_subtype,
+        NULL as legal_reserve_perc, 
+        FALSE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made,
+        3 as priority_level,
+        geometry,
+        file_hash, 
+        ingested_at
+    FROM {{ ref('stg_ibge_bc250_linhas_energia') }}
+),
+
+-- NOVA CAMADA: POLÍGONOS DE ÁGUA (PARA IDENTIFICAR REPRESAS ARTIFICIAIS)
+water_features AS (
+    SELECT 
+        CONCAT('WB_FEAT_', CAST(ABS(FARM_FINGERPRINT(ST_ASBINARY(geometry))) AS STRING)) as restriction_id, 
+        water_body_name as restriction_name,
+        'WATER_BODY_FEATURE' as restriction_type, 
+        water_body_type as restriction_subtype,
+        NULL as legal_reserve_perc, 
+        FALSE as is_hard_block, 
+        is_man_made, -- Aqui identificamos se é artificial
+        4 as priority_level,
+        geometry,
+        file_hash, 
+        ingested_at
+    FROM {{ ref('stg_ibge_bc250_massas_agua') }}
 ),
 
 quilombolas AS (
@@ -94,6 +130,7 @@ quilombolas AS (
         certification_phase as restriction_subtype,
         NULL as legal_reserve_perc, 
         TRUE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made,
         1 as priority_level,
         geometry,
         file_hash, 
@@ -109,6 +146,7 @@ uc_icmbio AS (
         category as restriction_subtype,
         NULL as legal_reserve_perc, 
         TRUE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made,
         1 as priority_level,
         geometry,
         file_hash, 
@@ -124,6 +162,7 @@ uc_sema AS (
         category as restriction_subtype,
         NULL as legal_reserve_perc, 
         TRUE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made,
         1 as priority_level,
         geometry,
         file_hash, 
@@ -139,6 +178,7 @@ assentamentos_incra AS (
         phase as restriction_subtype,
         NULL as legal_reserve_perc, 
         TRUE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made,
         1 as priority_level,
         geometry,
         file_hash, 
@@ -154,6 +194,7 @@ assentamentos_intermat AS (
         phase as restriction_subtype,
         NULL as legal_reserve_perc, 
         TRUE as is_hard_block, 
+        CAST(NULL AS BOOL) as is_man_made,
         1 as priority_level,
         geometry,
         file_hash, 
@@ -167,6 +208,8 @@ unioned AS (
     SELECT * FROM app_rivers UNION ALL
     SELECT * FROM app_lakes UNION ALL
     SELECT * FROM risk_roads UNION ALL
+    SELECT * FROM power_lines UNION ALL -- Nova
+    SELECT * FROM water_features UNION ALL -- Nova
     SELECT * FROM quilombolas UNION ALL
     SELECT * FROM uc_icmbio UNION ALL
     SELECT * FROM uc_sema UNION ALL
