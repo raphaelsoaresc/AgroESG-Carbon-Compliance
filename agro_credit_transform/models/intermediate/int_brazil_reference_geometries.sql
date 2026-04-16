@@ -18,10 +18,10 @@ WITH biomes AS (
         FALSE as is_hard_block, 
         CAST(NULL AS BOOL) as is_man_made, -- Nova coluna
         2 as priority_level,
-        SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry,
+        geometry,
         file_hash, 
         ingested_at
-    FROM {{ ref('stg_ibge_biomes') }}
+    FROM {{ ref('int_ibge_biomes_geometries') }}
 ),
 
 indigenous AS (

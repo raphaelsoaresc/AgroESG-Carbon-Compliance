@@ -15,7 +15,7 @@ spatial_processing AS (
         file_hash,
         ingested_at,
         -- 1. Converte e valida
-        SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry_raw
+        SAFE.ST_GEOGFROMTEXT(geometry_wkt, make_valid => TRUE) as geometry
     FROM staging_data
 ),
 
@@ -26,13 +26,8 @@ enriched_data AS (
         file_hash,
         ingested_at,
         
-        -- 2. SIMPLIFICAÇÃO: Biomas não precisam de precisão de cm. 
-        -- 100 metros de tolerância reduz drasticamente o número de vértices.
-        ST_SIMPLIFY(geometry_raw, 100) as geometry,
-
-        -- 3. BOUNDING BOX: Útil para filtros ST_INTERSECTSBOX ultra rápidos no Mart
-        -- O BigQuery agradece se você já deixar os limites calculados.
-        ST_BOUNDINGBOX(geometry_raw) as bbox,
+        ST_BOUNDINGBOX(geometry) as bbox,
+        geometry,
 
         -- Regra de Negócio: Reserva Legal
         CASE 
@@ -41,7 +36,7 @@ enriched_data AS (
             ELSE 0.20
         END as legal_reserve_perc
     FROM spatial_processing
-    WHERE geometry_raw IS NOT NULL
+    WHERE geometry IS NOT NULL
 )
 
 SELECT * FROM enriched_data

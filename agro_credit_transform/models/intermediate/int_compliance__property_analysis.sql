@@ -107,10 +107,12 @@ forensic_areas AS (
         COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN geometry END)) / 10000, 0) as forensic_traditional_ha,
         COALESCE(ST_AREA(ST_UNION_AGG(CASE WHEN target_type = 'RECORTE_SOBREPOSICAO_RODOVIA' THEN geometry END)) / 10000, 0) as forensic_road_overlap_ha,
 
+        -- CÁLCULO DOS PERCENTUAIS PARA O RESGATE DE IDENTIDADE
         MAX(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN overlap_pct ELSE 0 END) as settlement_overlap_pct,
         MAX(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN overlap_pct ELSE 0 END) as traditional_overlap_pct,
         MAX(CASE WHEN target_type = 'RECORTE_INVASAO_UC' THEN overlap_pct ELSE 0 END) as uc_overlap_pct,
         MAX(CASE WHEN target_type = 'RECORTE_INVASAO_TI' THEN overlap_pct ELSE 0 END) as ti_overlap_pct,
+        MAX(CASE WHEN target_type = 'RECORTE_INVASAO_QUILOMBO' THEN overlap_pct ELSE 0 END) as quilombo_overlap_pct,
         
         ANY_VALUE(CASE WHEN target_type = 'RECORTE_INVASAO_ASSENTAMENTO' THEN target_name END) as settlement_name,
         ANY_VALUE(CASE WHEN target_type = 'RECORTE_TRADITIONAL_TERRITORY' THEN target_name END) as traditional_name,
@@ -199,11 +201,34 @@ full_context AS (
         c.area_rural_consolidada_ha, c.area_pousio_ha, c.area_uso_restrito_ha,
         (COALESCE(f.forensic_ti_ha, 0) + COALESCE(f.forensic_uc_ha, 0) + COALESCE(f.forensic_quilombo_ha, 0) + COALESCE(f.forensic_settlement_ha, 0) + COALESCE(f.forensic_traditional_ha, 0)) as protected_area_overlap_ha_raw,
         f.forensic_ti_ha, f.forensic_quilombo_ha, f.forensic_uc_ha, f.forensic_settlement_ha, f.forensic_traditional_ha, f.data_source_quality,
-        COALESCE(p.property_type = 'AST' OR f.settlement_overlap_pct > 90, FALSE) as is_settlement_identity,
-        COALESCE(p.property_type = 'PCT' OR f.traditional_overlap_pct > 90, FALSE) as is_traditional_identity,
-        COALESCE(p.property_type = 'PCT' AND f.forensic_quilombo_ha > 0, FALSE) as is_quilombo_identity,
-        COALESCE(p.property_type = 'UC' OR f.uc_overlap_pct > 90, FALSE) as is_uc_identity,
-        COALESCE(p.property_type = 'TI' OR f.ti_overlap_pct > 90, FALSE) as is_ti_identity,
+        
+        -- IDENTIDADE PURA (Vinda dos dados públicos do CAR)
+        CASE 
+            WHEN p.property_type = 'TI' THEN TRUE 
+            WHEN p.property_type = 'IRU' AND f.ti_overlap_pct > 99 THEN TRUE 
+            ELSE FALSE 
+        END as is_ti_identity,
+
+        CASE 
+            WHEN p.property_type = 'PCT' AND f.forensic_quilombo_ha > 0 THEN TRUE
+            WHEN p.property_type = 'IRU' AND f.quilombo_overlap_pct > 99 THEN TRUE 
+            ELSE FALSE 
+        END as is_quilombo_identity,
+
+        CASE 
+            WHEN p.property_type = 'AST' THEN TRUE 
+            WHEN p.property_type = 'IRU' AND f.settlement_overlap_pct > 99 THEN TRUE 
+            ELSE FALSE 
+        END as is_settlement_identity,
+
+        CASE 
+            WHEN p.property_type = 'PCT' THEN TRUE 
+            WHEN p.property_type = 'IRU' AND f.traditional_overlap_pct > 99 THEN TRUE 
+            ELSE FALSE 
+        END as is_traditional_identity,
+
+        CASE WHEN p.property_type = 'UC' THEN TRUE ELSE FALSE END as is_uc_identity,
+
         f.settlement_name, f.traditional_name, f.ti_name, f.uc_name, f.quilombo_name,
         COALESCE(so.overlap_pct, 0) as car_on_car_overlap_pct,
         COALESCE(so.total_overlapping_cars, 0) as total_overlapping_cars,
