@@ -61,12 +61,6 @@ export default function Header({ carId, setCarId, onSearch, searchCount, isAdmin
             </Link>
           )}
 
-          <Link 
-            href="/caipora/planos" 
-            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-6 py-4 rounded-2xl transition-all uppercase tracking-widest shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2"
-          >
-            <CreditCard className="w-4 h-4" /> Ver Planos
-          </Link>
         </div>
       </div>
 

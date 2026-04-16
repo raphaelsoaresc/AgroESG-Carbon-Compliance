@@ -3,11 +3,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 
 export default function Institucional() {
-  const stateData =[
-    { uf: 'PA', props: '378.265', area: '99M', falsos: '52.182', eudr: '52.779', cmn: '21.224', esg: '2.328', adj: '53.817' },
-    { uf: 'MT', props: '211.772', area: '100M', falsos: '28.023', eudr: '11.501', cmn: '13.276', esg: '1.346', adj: '38.849' },
-    { uf: 'RO', props: '188.623', area: '23M', falsos: '21.337', eudr: '16.282', cmn: '13.061', esg: '1.094', adj: '33.202' },
-    { uf: 'AM', props: '98.080', area: '93M', falsos: '15.299', eudr: '13.064', cmn: '8.644', esg: '1.433', adj: '12.096' },
+  const stateData = [
+    { uf: 'PA', props: '378.395', area: '58.1', falsos: '111.882', eudr: '57.339', cmn: '19.076', adj: '334.542' },
+    { uf: 'MT', props: '211.773', area: '77.6', falsos: '85.954', eudr: '12.815', cmn: '26.629', adj: '202.346' },
+    { uf: 'RO', props: '188.623', area: '15.7', falsos: '44.308', eudr: '18.204', cmn: '11.215', adj: '159.054' },
+    { uf: 'AM', props: '98.080', area: '21.6', falsos: '24.149', eudr: '14.196', cmn: '7.296', adj: '72.296' },
   ];
 
   return (
@@ -22,8 +22,7 @@ export default function Institucional() {
 
           <div className="flex flex-wrap justify-center gap-4 md:gap-10 items-center font-bold text-[10px] md:text-sm uppercase tracking-widest text-slate-600">
             <a href="#solucoes" className="hover:text-green-600 transition-colors">Soluções</a>
-            <a href="#planos" className="hover:text-green-600 transition-colors font-black">Planos SaaS</a>
-            <a href="#art" className="hover:text-green-600 transition-colors">Laudos ART</a>
+            <a href="#art" className="hover:text-green-600 transition-colors">Especialidades ART</a>
             <Link href="/caipora" className="bg-slate-900 text-white px-6 py-3 md:px-8 md:py-4 rounded-full hover:bg-green-600 transition-all shadow-xl">
               Acessar Caipora
             </Link>
@@ -35,19 +34,20 @@ export default function Institucional() {
       <section className="relative pt-20 pb-32 px-6 overflow-hidden">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           <div className="space-y-10">
-            <span className="inline-block bg-green-100 text-green-700 px-6 py-2 rounded-full text-xs font-black uppercase tracking-[0.3em]">
-              24+ Data Layers | CREA PR-237151/D
+            <span className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-6 py-2 rounded-full text-xs font-black uppercase tracking-[0.3em]">
+              <span className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></span>
+              Habilitado para Perícia Judicial | CREA PR-237151/D
             </span>
             <h1 className="text-6xl md:text-8xl font-black text-slate-900 leading-[1.05] tracking-tighter">
               Auditoria Geoespacial com <span className="text-green-600">Rigor Pericial.</span>
             </h1>
             <p className="text-xl md:text-2xl text-slate-500 leading-relaxed max-w-xl font-medium">
-              O único motor de decisão bitemporal que integra análise de adjacência, mitigação por barreiras hidrográficas e cálculo de passivo financeiro real.
+              O único motor de decisão bitemporal que integra prova de nexo causal, análise de adjacência e evidências técnicas com validade jurídica.
             </p>
             <div className="flex flex-col sm:flex-row gap-6">
-              <a href="#planos" className="bg-slate-900 text-white px-10 py-5 rounded-2xl font-bold text-xl text-center hover:bg-slate-800 transition-all active:scale-95">
-                Ver Planos SaaS
-              </a>
+              <Link href="/caipora" className="bg-slate-900 text-white px-10 py-5 rounded-2xl font-bold text-xl text-center hover:bg-slate-800 transition-all active:scale-95">
+                Acessar Plataforma
+              </Link>
               <a href="#art" className="border-2 border-green-600 text-green-600 px-10 py-5 rounded-2xl font-bold text-xl text-center hover:bg-green-50 transition-all active:scale-95">
                 Solicitar Laudo ART
               </a>
@@ -59,7 +59,7 @@ export default function Institucional() {
              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent flex items-end p-12">
                 <div className="space-y-2">
                   <p className="text-green-400 font-black uppercase tracking-widest text-xs">Intelligence Engine</p>
-                  <p className="text-white font-mono text-lg">Caipora Sentinela: Auditoria de 870k imóveis em segundos.</p>
+                  <p className="text-white font-mono text-lg">Caipora Sentinela: Auditoria de 876k imóveis em segundos.</p>
                 </div>
              </div>
           </div>
@@ -80,12 +80,12 @@ export default function Institucional() {
             {[
               { 
                 title: "Adjacency Intelligence", 
-                desc: "Algoritmo exclusivo que identifica riscos em vizinhos, com mitigação automática via barreiras hidrográficas (ANA), eliminando bloqueios indevidos por 'contágio'.", 
+                desc: "Algoritmo exclusivo que identifica riscos em vizinhos e conexões por estradas, com mitigação automática via barreiras hidrográficas (ANA), eliminando bloqueios indevidos por 'contágio' geográfico.", 
                 icon: "🌊" 
               },
               { 
                 title: "Geospatial Forensic", 
-                desc: "Recortes exatos de invasão e cálculo automático de passivo financeiro (multas estimadas BRL) para análise de LGD e risco de crédito.", 
+                desc: "Identificação de Nexo Causal Logístico para prova de dolo (intersecção estrada/pista x crime), com recortes exatos de invasão e cálculo automático de passivo financeiro (BRL) para análise de LGD e risco de crédito.", 
                 icon: "⚖️" 
               },
               { 
@@ -109,129 +109,62 @@ export default function Institucional() {
         </div>
       </section>
 
-      {/* SEÇÃO PLANOS SAAS */}
-      <section id="planos" className="py-32 px-6 bg-white">
+      {/* SEÇÃO ART - ESPECIALIDADES PERICIAIS */}
+      <section id="art" className="py-32 px-6 bg-white">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-20 space-y-4">
-            <h2 className="text-5xl font-black uppercase tracking-tighter">Planos de Acesso</h2>
-            <p className="text-xl text-slate-500 font-medium">Escolha o nível de profundidade da sua auditoria.</p>
+          <div className="text-center mb-16 space-y-4">
+            <h2 className="text-5xl font-black uppercase tracking-tighter text-slate-900">
+              Especialidades com <span className="text-green-600">Fé Pública</span>
+            </h2>
+            <p className="text-slate-500 text-xl font-medium max-w-3xl mx-auto">
+              Emissão de ART (Anotação de Responsabilidade Técnica) conforme Resolução CONFEA 313/86 para fins judiciais e corporativos.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            
-            {/* PLANO FREE */}
-            <div className="border-2 border-slate-100 p-12 rounded-[3rem] flex flex-col space-y-8 hover:border-slate-300 transition-all">
-              <div className="space-y-2">
-                <h3 className="text-3xl font-black uppercase">Plano Explorer</h3>
-                <p className="text-slate-500 font-medium text-lg">Para prospecção e consultas rápidas.</p>
-              </div>
-              <div className="text-5xl font-black">R$ 0<span className="text-lg text-slate-400">/mês</span></div>
-              <ul className="space-y-4 flex-grow">
-                <li className="flex items-center gap-3 font-bold text-slate-700">
-                  <span className="text-green-500 text-xl">✓</span> Acesso ao <strong>Catálogo Sentinela</strong>
-                </li>
-                <li className="flex items-center gap-3 font-bold text-slate-700">
-                  <span className="text-green-500 text-xl">✓</span> Filtros por Bioma, UF e Porte
-                </li>
-                <li className="flex items-center gap-3 font-bold text-slate-700">
-                  <span className="text-green-500 text-xl">✓</span> 3 Auditorias detalhadas/mês
-                </li>
-                <li className="flex items-center gap-3 font-bold text-slate-400 line-through">
-                  <span className="text-red-400 text-xl">✕</span> Cálculo de Passivo Estimado (BRL)
-                </li>
-                <li className="flex items-center gap-3 font-bold text-slate-400 line-through">
-                  <span className="text-red-400 text-xl">✕</span> Visualização de mapas e recortes
-                </li>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+            <div className="p-10 border border-slate-100 rounded-[3rem] bg-slate-50 hover:shadow-2xl transition-all group">
+              <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center mb-8 font-black text-xl group-hover:bg-green-600 transition-colors">01</div>
+              <h4 className="text-2xl font-black mb-6 uppercase tracking-tight">Perícia Judicial & Forense</h4>
+              <ul className="text-slate-600 space-y-4 text-base font-bold">
+                <li className="flex items-start gap-2"><span>•</span> Laudos de Confrontação (SIGEF/CAR)</li>
+                <li className="flex items-start gap-2"><span>•</span> Nexo Causal de Desmatamento</li>
+                <li className="flex items-start gap-2"><span>•</span> Prova Técnica em Invasões Territoriais</li>
+                <li className="flex items-start gap-2"><span>•</span> Assistência Técnica em Processos</li>
               </ul>
-              <Link href="/caipora" className="w-full py-5 rounded-2xl border-2 border-slate-900 text-center font-black text-xl hover:bg-slate-900 hover:text-white transition-all">
-                Começar Agora
-              </Link>
             </div>
 
-            {/* PLANO PRO */}
-            <div className="bg-slate-900 p-12 rounded-[3rem] flex flex-col space-y-8 relative overflow-hidden shadow-2xl shadow-green-500/20 border-2 border-green-500">
-              <div className="absolute top-8 right-8 bg-green-500 text-slate-900 px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">Recomendado</div>
-              <div className="space-y-2">
-                <h3 className="text-3xl font-black uppercase text-white">Plano PRO</h3>
-                <p className="text-slate-400 font-medium text-lg">A solução definitiva para Tradings e Fiagros.</p>
-              </div>
-              <div className="text-5xl font-black text-white">R$ 4.000<span className="text-lg text-slate-500">/mês</span></div>
-              
-              <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-2xl text-center">
-                <p className="text-green-400 font-black text-sm uppercase tracking-tighter">
-                  ⭐ INCLUSO: 3 Créditos de Laudo ART/mês
-                </p>
-              </div>
-
-              <ul className="space-y-4 flex-grow text-white">
-                <li className="flex items-center gap-3 font-bold">
-                  <span className="text-green-400 text-xl">✓</span> <strong>50 Auditorias Completas/mês</strong>
-                </li>
-                <li className="flex items-center gap-3 font-bold">
-                  <span className="text-green-400 text-xl">✓</span> Cálculo de Passivo Total (Ambiental/Social)
-                </li>
-                <li className="flex items-center gap-3 font-bold">
-                  <span className="text-green-400 text-xl">✓</span> Mapas Interativos com Camadas GIS
-                </li>
-                <li className="flex items-center gap-3 font-bold">
-                  <span className="text-green-400 text-xl">✓</span> Indicadores EUDR-Ready e CMN 5.081
-                </li>
-                <li className="flex items-center gap-3 font-bold text-green-400">
-                  <span className="text-xl">✓</span> 3 Laudos Periciais assinados (CREA)
-                </li>
+            <div className="p-10 border border-slate-100 rounded-[3rem] bg-slate-50 hover:shadow-2xl transition-all group">
+              <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center mb-8 font-black text-xl group-hover:bg-green-600 transition-colors">02</div>
+              <h4 className="text-2xl font-black mb-6 uppercase tracking-tight">Compliance & Auditoria ESG</h4>
+              <ul className="text-slate-600 space-y-4 text-base font-bold">
+                <li className="flex items-start gap-2"><span>•</span> Auditoria para Resolução CMN 5.081</li>
+                <li className="flex items-start gap-2"><span>•</span> Verificação de Conformidade EUDR</li>
+                <li className="flex items-start gap-2"><span>•</span> Relatórios de Risco para FIAGROS</li>
+                <li className="flex items-start gap-2"><span>•</span> Monitoramento de Embargos</li>
               </ul>
-              <a href="mailto:compliance@agrimarketintel.com?subject=Assinatura Plano PRO" className="w-full bg-green-600 text-white text-center py-5 rounded-2xl font-black text-xl hover:bg-green-500 transition-all">
-                Assinar Agora
-              </a>
+            </div>
+
+            <div className="p-10 border border-slate-100 rounded-[3rem] bg-slate-50 hover:shadow-2xl transition-all group">
+              <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center mb-8 font-black text-xl group-hover:bg-green-600 transition-colors">03</div>
+              <h4 className="text-2xl font-black mb-6 uppercase tracking-tight">Gestão de Ativos & Passivos</h4>
+              <ul className="text-slate-600 space-y-4 text-base font-bold">
+                <li className="flex items-start gap-2"><span>•</span> Cálculo de Passivo Financeiro Ambiental</li>
+                <li className="flex items-start gap-2"><span>•</span> Análise de Viabilidade de Garantias</li>
+                <li className="flex items-start gap-2"><span>•</span> Levantamento de Custos de Regularização</li>
+                <li className="flex items-start gap-2"><span>•</span> Avaliação de Riscos Operacionais</li>
+              </ul>
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* SEÇÃO ART - SERVIÇO CONSULTIVO */}
-      <section id="art" className="py-32 px-6 bg-slate-50">
-        <div className="max-w-7xl mx-auto bg-slate-900 rounded-[4rem] p-12 md:p-24 overflow-hidden relative">
-          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            <div className="space-y-8">
-              <h2 className="text-5xl md:text-6xl font-black text-white leading-tight">
-                Auditoria Técnica com <span className="text-green-400">Validade Jurídica.</span>
-              </h2>
-              <p className="text-slate-400 text-xl leading-relaxed font-medium">
-                Transformamos os dados do sistema em evidência legal. Emitimos laudos periciais assinados com ART (Anotação de Responsabilidade Técnica) por profissional habilitado.
-              </p>
-              <div className="bg-white/5 p-6 rounded-2xl border border-white/10 space-y-2">
-                <p className="text-white font-black uppercase tracking-widest text-sm">Responsável Técnico:</p>
-                <p className="text-green-400 font-mono text-lg">Registro Crea nº PR-237151/D</p>
-                <p className="text-green-400 font-mono text-lg">Visto CREA-AM nº 172392095-9</p>
-              </div>
+          <div className="bg-slate-900 rounded-[3rem] p-12 flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="space-y-2">
+              <p className="text-green-400 font-mono text-sm uppercase tracking-widest">Responsável Técnico Habilitado</p>
+              <p className="text-white text-2xl font-black">Registro Crea nº PR-237151/D</p>
+              <p className="text-slate-400 text-sm">Vistos ativos: SP nº 5071832461 | AM nº 172392095-9</p>
             </div>
-
-            <div className="bg-white p-10 rounded-[3rem] space-y-8 text-center shadow-2xl">
-              <h3 className="text-2xl font-black text-slate-900 uppercase tracking-widest">Laudo sob Demanda</h3>
-              <p className="text-slate-500 font-medium italic">"A segurança de um perito, com a velocidade da tecnologia."</p>
-              
-              <div className="space-y-4 text-left">
-                <div className="flex items-center gap-4 text-slate-700 font-bold">
-                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-900">1</div>
-                  <span>Solicite informando o CAR</span>
-                </div>
-                <div className="flex items-center gap-4 text-slate-700 font-bold">
-                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-900">2</div>
-                  <span>Pagamento via Fatura/Pix</span>
-                </div>
-                <div className="flex items-center gap-4 text-slate-700 font-bold">
-                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-900">3</div>
-                  <span>Receba no e-mail em 7 dias</span>
-                </div>
-              </div>
-
-              <div className="pt-6 border-t border-slate-100">
-                <a href="mailto:compliance@agrimarketintel.com?subject=Solicitação de Laudo ART" className="block w-full bg-slate-900 text-white text-center py-5 rounded-2xl font-black text-xl hover:bg-green-600 transition-all">
-                  Solicitar Orçamento
-                </a>
-                <p className="text-[10px] text-slate-400 mt-4 uppercase font-black tracking-widest">Serviço em conformidade com a Resolução Confea 313/86</p>
-              </div>
-            </div>
+            <a href="mailto:compliance@agrimarketintel.com?subject=Solicitação de Laudo ART" className="bg-white text-slate-900 px-12 py-5 rounded-2xl font-black text-xl hover:bg-green-500 hover:text-white transition-all">
+              Solicitar Orçamento de Laudo
+            </a>
           </div>
         </div>
       </section>
@@ -241,7 +174,7 @@ export default function Institucional() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-20 space-y-6">
             <span className="text-green-400 font-black uppercase tracking-[0.3em] text-sm">Impacto em Escala</span>
-            <h2 className="text-5xl font-black uppercase tracking-tighter text-white">314 Milhões de Hectares</h2>
+            <h2 className="text-5xl font-black uppercase tracking-tighter text-white">173 Milhões de Hectares</h2>
             <p className="text-xl text-slate-400 max-w-3xl mx-auto font-medium">
               Volume de dados processados e riscos mitigados pelo nosso motor de inteligência em tempo real.
             </p>
@@ -249,10 +182,10 @@ export default function Institucional() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
             {[
-              { label: "Área Monitorada", value: "314 Mi", suffix: "ha", color: "text-white" },
-              { label: "Propriedades Analisadas", value: "876.740", suffix: "", color: "text-white" },
-              { label: "Violações EUDR Barradas", value: "93.626", suffix: "", color: "text-red-400" },
-              { label: "Falsos Positivos Mitigados*", value: "116.841", suffix: "", color: "text-green-400" }
+              { label: "Área Monitorada", value: "173 Mi", suffix: "ha", color: "text-white" },
+              { label: "Propriedades Analisadas", value: "876.871", suffix: "", color: "text-white" },
+              { label: "Violações EUDR Barradas", value: "102.554", suffix: "", color: "text-red-400" },
+              { label: "Falsos Positivos Mitigados*", value: "266.293", suffix: "", color: "text-green-400" }
             ].map((kpi, i) => (
               <div key={i} className="bg-slate-800/50 border border-slate-700 p-8 rounded-3xl hover:bg-slate-800 transition-colors">
                 <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mb-4">{kpi.label}</p>
@@ -263,15 +196,14 @@ export default function Institucional() {
               </div>
             ))}
           </div>
-          <p className="text-xs text-slate-500 mb-10 italic">*Falsos positivos mitigados via análise de identidade e barreiras hidrográficas.</p>
 
           {/* Tabela de Estados */}
           <div className="bg-slate-800/30 border border-slate-700 rounded-3xl overflow-hidden">
             <div className="p-8 border-b border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4">
               <h3 className="text-2xl font-bold">Detalhamento por Estado (Amazônia Legal)</h3>
               <div className="flex gap-4 text-sm font-bold text-slate-400">
-                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-400"></span> Bloqueios CMN: 56.205</span>
-                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-400"></span> Conflitos ESG: 6.201</span>
+                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-400"></span> Bloqueios CMN: 64.216</span>
+                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-400"></span> Conflitos ESG: 15.445</span>
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -301,6 +233,71 @@ export default function Institucional() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* METODOLOGIA - COM ESPAÇAMENTO REFORÇADO E TEXTO ORIGINAL */}
+          <div className="pt-48 mt-20 space-y-16 border-t border-slate-800">
+            <div className="text-center space-y-6">
+              <h3 className="text-4xl md:text-5xl font-black uppercase tracking-tighter">Metodologia de Auditoria Forense Digital e Compliance Socioambiental</h3>
+              <p className="text-slate-400 text-xl max-w-4xl mx-auto font-medium">
+                O sistema utiliza uma arquitetura de Inteligência de Dados Geográfica para realizar a auditoria automatizada de ativos agrários. A metodologia é dividida em quatro pilares fundamentais:
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              {/* Pilar 1 */}
+              <div className="bg-slate-800/40 border border-slate-700 p-12 rounded-[4rem] space-y-6">
+                <h4 className="text-2xl font-bold text-green-400">1. Ingestão de Fontes Oficiais (Transparência e Fé Pública)</h4>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  A análise não se baseia em opiniões, mas em dados brutos extraídos diretamente das bases de dados do Governo Federal e Estadual, garantindo a integridade da prova:
+                </p>
+                <ul className="text-slate-400 text-xs space-y-2">
+                  <li><strong>• Dados Fundiários:</strong> SIGEF (INCRA) e CAR (Serviço Florestal Brasileiro).</li>
+                  <li><strong>• Dados de Fiscalização:</strong> Histórico de embargos do IBAMA, ICMBio e Secretarias Estaduais (SEMA).</li>
+                  <li><strong>• Dados Sociais:</strong> Cadastro de Empregadores do MTE (Lista Suja do Trabalho Escravo).</li>
+                  <li><strong>• Dados Geográficos:</strong> Malhas do IBGE, ANA (Hidrografia) e MapBiomas (Alertas de Desmatamento).</li>
+                </ul>
+              </div>
+
+              {/* Pilar 2 */}
+              <div className="bg-slate-800/40 border border-slate-700 p-12 rounded-[4rem] space-y-6">
+                <h4 className="text-2xl font-bold text-green-400">2. Higienização e Geoprocessamento (Precisão Técnica)</h4>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  Os dados brutos passam por um rigoroso processo de tratamento:
+                </p>
+                <ul className="text-slate-400 text-xs space-y-2">
+                  <li><strong>• Deduplicação Forense:</strong> Garantia de que apenas a versão mais recente e válida de cada documento (CAR/SIGEF) seja analisada.</li>
+                  <li><strong>• Padronização Espacial:</strong> Conversão de coordenadas e polígonos para um formato geográfico unificado, permitindo o cruzamento exato de malhas.</li>
+                  <li><strong>• Trava de Sanidade:</strong> Identificação de fraudes de área ou inconsistências documentais (áreas declaradas x desenho geográfico).</li>
+                </ul>
+              </div>
+
+              {/* Pilar 3 */}
+              <div className="bg-slate-800/40 border border-slate-700 p-12 rounded-[4rem] space-y-6">
+                <h4 className="text-2xl font-bold text-green-400">3. Análise Bitemporal e Regras de Negócio (Conformidade Legal)</h4>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  O motor aplica automaticamente as legislações vigentes:
+                </p>
+                <ul className="text-slate-400 text-xs space-y-2">
+                  <li><strong>• Marco Temporal (Código Florestal):</strong> Diferenciação de supressão de vegetação pré e pós 22 de julho de 2008.</li>
+                  <li><strong>• Compliance Bancário (CMN 5.081):</strong> Verificação automática de restrições para concessão de crédito rural em biomas protegidos.</li>
+                  <li><strong>• Regras Internacionais (EUDR):</strong> Auditoria de desmatamento pós-2020 para fins de exportação para a União Europeia.</li>
+                </ul>
+              </div>
+
+              {/* Pilar 4 */}
+              <div className="bg-slate-800/40 border border-slate-700 p-12 rounded-[4rem] space-y-6">
+                <h4 className="text-2xl font-bold text-green-400">4. Inteligência de Vizinhança e Nexo Causal (Análise de Risco Avançada)</h4>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  Diferente de uma análise comum, esta metodologia investiga o contexto da propriedade:
+                </p>
+                <ul className="text-slate-400 text-xs space-y-2">
+                  <li><strong>• Risco de Adjacência:</strong> Identifica se a fazenda vizinha possui crimes ambientais e se há vetores logísticos (estradas ou rios) que conectam as duas.</li>
+                  <li><strong>• Nexo Causal Logístico:</strong> Verifica se invasões em TIs ou UCs são servidas por infraestrutura interna (pistas de pouso ou estradas).</li>
+                  <li><strong>• Validação por Sensores:</strong> Uso de dados de radar e satélite (SRTM/NDVI) para confirmar a topografia e o uso real do solo.</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -342,7 +339,7 @@ export default function Institucional() {
                 ))}
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed italic font-medium mt-4">
-                Análises técnicas assinadas por Tecnólogo em Agronegócio. CREA PR-237151/D | Visto CREA-AM 172392095-9.
+                Análises técnicas assinadas por Tecnólogo em Agronegócio. CREA PR-237151/D | Visto CREA-SP 5071832461 | Visto CREA-AM 172392095-9. Em conformidade com a Resolução CONFEA 313/86.
               </p>
             </div>
           </div>
