@@ -156,19 +156,14 @@ models:
           - not_null
 
       - name: map_layer
-        description: "Identificador da camada para estilização no frontend."
+        description: "Identificador do grupo de camadas para o controle de camadas (Layer Control) no Leaflet."
         data_tests:
           - not_null
           - accepted_values:
               values:
-                - 'PROPERTY_BOUNDARY'
-                - 'RESTRICTION_EMBARGO'
-                - 'RESTRICTION_DEFORESTATION'
-                - 'RESTRICTION_EUDR'                # <--- ADICIONADO
-                - 'RESTRICTION_SOCIAL_ENVIRONMENTAL'
-                - 'RESTRICTION_APP'
-                - 'RESTRICTION_OTHERS'
-                - 'ADJACENT_RISK_SOURCE'            # <--- ADICIONADO
+                - 'BASE'      # Limite da propriedade
+                - 'CRIMINAL'  # Desmatamentos, Embargos, EUDR, APP
+                - 'LOGISTICS' # Estradas e Linhas de Transmissão
 
       - name: geometry
         description: "Geometria simplificada para renderização web."

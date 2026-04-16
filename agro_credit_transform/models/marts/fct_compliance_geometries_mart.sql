@@ -9,104 +9,110 @@
 WITH metadata AS (
     SELECT 
         UPPER(TRIM(property_id)) as property_id,
-        city,
-        city_data_source_origin, 
+        geometry as property_geom,
+        property_alias,
         final_eligibility_status,
-        data_reliability_index,
-        estimated_financial_liability_brl,
-        forensic_summary,
-        internal_risks_found,
-        uf_origem,
         is_settlement_identity,
         is_traditional_identity,
-        is_quilombo_identity,
-        max_adjacency_score 
+        is_quilombo_identity
     FROM {{ ref('fct_compliance_risk') }}
 ),
 
-risky_neighbor_links AS (
+infrastructure_evidence AS (
+    -- Estradas (Nexo Causal)
     SELECT 
-        nb.property_id, 
-        nb.neighbor_id, 
-        f_neighbor.property_alias as neighbor_alias,
-        f_neighbor.final_eligibility_status as neighbor_status,
-        f_neighbor.internal_risks_found as neighbor_risks,
-        nb.distance_meters,
-        nb.connected_road_name
-    FROM {{ ref('int_compliance__neighbor_barriers') }} nb
-    INNER JOIN {{ ref('fct_compliance_risk') }} f_neighbor 
-        ON nb.neighbor_id = f_neighbor.property_id
-    WHERE f_neighbor.is_technically_blocked = TRUE 
+        m.property_id,
+        'LOGISTICS' as map_layer, -- Nome corrigido para bater com o config
+        'ROAD' as target_type,
+        CONCAT('Rodovia: ', r.restriction_name) as info_context,
+        '#FFD700' as hex_color, 
+        0.8 as fill_opacity,
+        2 as z_index,
+        ST_INTERSECTION(r.geometry, m.property_geom) as geom
+    FROM {{ ref('int_brazil_reference_geometries') }} r
+    INNER JOIN metadata m ON ST_INTERSECTS(r.geometry, m.property_geom)
+    WHERE r.restriction_subtype = 'ROAD'
+
+    UNION ALL
+
+    -- Linhas de Energia
+    SELECT 
+        m.property_id,
+        'LOGISTICS' as map_layer,
+        'POWER_LINE' as target_type,
+        CONCAT('Linha de Energia: ', r.restriction_name) as info_context,
+        '#FFA500' as hex_color, 
+        0.8 as fill_opacity,
+        2 as z_index,
+        ST_INTERSECTION(r.geometry, m.property_geom) as geom
+    FROM {{ ref('int_brazil_reference_geometries') }} r
+    INNER JOIN metadata m ON ST_INTERSECTS(r.geometry, m.property_geom)
+    WHERE r.restriction_subtype = 'POWER_LINE'
+),
+
+forensic_shapes AS (
+    SELECT 
+        UPPER(TRIM(property_id)) as property_id,
+        'CRIMINAL' as map_layer,
+        target_type,
+        CASE 
+            WHEN target_type = 'RECORTE_EMBARGO' THEN 'Área de Embargo Ativo'
+            WHEN target_type = 'RECORTE_DESMATAMENTO_MAPBIOMAS' THEN 'Desmatamento Detectado'
+            WHEN target_type = 'RECORTE_DESMATAMENTO_EUDR' THEN 'Restrição EUDR (Pós-2020)'
+            WHEN target_type LIKE 'RECORTE_DESMATAMENTO_EM_APP%' THEN 'Desmatamento em APP'
+            ELSE target_type 
+        END as info_context,
+        CASE 
+            WHEN target_type = 'RECORTE_EMBARGO' THEN '#FF0000' 
+            WHEN target_type = 'RECORTE_DESMATAMENTO_EUDR' THEN '#8B0000' 
+            WHEN target_type LIKE 'RECORTE_DESMATAMENTO_EM_APP%' THEN '#FF4500' 
+            ELSE '#DC143C' 
+        END as hex_color,
+        0.6 as fill_opacity,
+        3 as z_index, 
+        geometry as geom
+    FROM {{ ref('int_compliance_forensic_shapes') }}
+    WHERE target_type NOT IN ('CAR_TOTAL', 'SIGEF_TOTAL')
 ),
 
 shapes_unioned AS (
-    -- 1. Geometria Principal do CAR (Borda da Propriedade)
+    -- Limite da Propriedade
     SELECT 
-        UPPER(TRIM(property_id)) as property_id,
-        'PROPERTY_BOUNDARY' as map_layer,
-        'CAR_TOTAL' as target_type,
-        CAST(NULL AS STRING) as info_context,
-        ST_SIMPLIFY(geometry_raw, 0.0001) as geom
-    FROM {{ ref('int_car_geometries') }}
+        property_id,
+        'BASE' as map_layer,
+        'PROPERTY_BOUNDARY' as target_type,
+        'Limite do Imóvel Rural' as info_context,
+        '#000000' as hex_color, 
+        0.1 as fill_opacity,
+        1 as z_index, 
+        ST_SIMPLIFY(property_geom, 0.0001) as geom
+    FROM metadata
     
     UNION ALL
-
-    -- 2. Recortes Periciais (Ajustado para granularidade EUDR e APP)
-    SELECT 
-        UPPER(TRIM(property_id)) as property_id,
-        CASE 
-            WHEN target_type = 'RECORTE_EMBARGO' THEN 'RESTRICTION_EMBARGO'
-            WHEN target_type = 'RECORTE_DESMATAMENTO_MAPBIOMAS' THEN 'RESTRICTION_DEFORESTATION'
-            WHEN target_type = 'RECORTE_DESMATAMENTO_EUDR' THEN 'RESTRICTION_EUDR'
-            WHEN target_type LIKE 'RECORTE_INVASAO_%' THEN 'RESTRICTION_SOCIAL_ENVIRONMENTAL'
-            WHEN target_type LIKE 'RECORTE_DESMATAMENTO_EM_APP%' THEN 'RESTRICTION_APP'
-            ELSE 'RESTRICTION_OTHERS'
-        END as map_layer,
-        target_type,
-        CAST(NULL AS STRING) as info_context,
-        ST_SIMPLIFY(geometry, 0.0001) as geom
-    FROM {{ ref('int_compliance_forensic_shapes') }}
-    WHERE target_type NOT IN ('CAR_TOTAL', 'SIGEF_TOTAL')
-
+    SELECT property_id, map_layer, target_type, info_context, hex_color, fill_opacity, z_index, ST_SIMPLIFY(geom, 0.0001) FROM forensic_shapes
     UNION ALL
-
-    -- 3. Geometria dos Vizinhos de Risco (Contexto de Adjacência)
-    SELECT 
-        UPPER(TRIM(lnk.property_id)) as property_id, 
-        'ADJACENT_RISK_SOURCE' as map_layer,
-        'NEIGHBOR_BOUNDARY' as target_type,
-        CONCAT('Vizinho: ', lnk.neighbor_alias, ' | Status: ', lnk.neighbor_status, ' | Riscos: ', lnk.neighbor_risks) as info_context,
-        ST_SIMPLIFY(g.geometry_raw, 0.0001) as geom
-    FROM risky_neighbor_links lnk
-    INNER JOIN {{ ref('int_car_geometries') }} g ON lnk.neighbor_id = g.property_id
+    SELECT property_id, map_layer, target_type, info_context, hex_color, fill_opacity, z_index, ST_SIMPLIFY(geom, 0.0001) FROM infrastructure_evidence
 )
 
 SELECT
     s.property_id,
-    m.city,
-    m.city_data_source_origin, 
+    m.property_alias,
     s.map_layer,
     s.target_type,
     s.info_context,
+    s.hex_color,
+    s.fill_opacity,
+    s.z_index,
     m.final_eligibility_status,
-    m.uf_origem,
-    m.data_reliability_index,
-    m.estimated_financial_liability_brl,
-    m.forensic_summary,
-    m.internal_risks_found,
-    m.max_adjacency_score,
-    (ST_BOUNDINGBOX(s.geom)).xmin as xmin,
-    (ST_BOUNDINGBOX(s.geom)).ymin as ymin,
-    (ST_BOUNDINGBOX(s.geom)).xmax as xmax,
-    (ST_BOUNDINGBOX(s.geom)).ymax as ymax,
+    ST_BOUNDINGBOX(s.geom).xmin as xmin,
+    ST_BOUNDINGBOX(s.geom).ymin as ymin,
+    ST_BOUNDINGBOX(s.geom).xmax as xmax,
+    ST_BOUNDINGBOX(s.geom).ymax as ymax,
     s.geom as geometry,
     CURRENT_TIMESTAMP() as generated_at
 FROM shapes_unioned s
 INNER JOIN metadata m ON s.property_id = m.property_id
-WHERE s.geom IS NOT NULL 
-  AND NOT ST_ISEMPTY(s.geom)
+WHERE s.geom IS NOT NULL AND NOT ST_ISEMPTY(s.geom)
   AND NOT (s.target_type = 'RECORTE_INVASAO_ASSENTAMENTO' AND m.is_settlement_identity)
   AND NOT (s.target_type = 'RECORTE_INVASAO_QUILOMBO' AND m.is_quilombo_identity)
   AND NOT (s.target_type = 'RECORTE_INVASAO_TI' AND m.is_traditional_identity)
-  AND NOT (s.target_type = 'RECORTE_INVASAO_TERRA_INDIGENA' AND m.is_traditional_identity)
-  AND NOT (s.target_type = 'RECORTE_TRADITIONAL_TERRITORY' AND m.is_traditional_identity)
