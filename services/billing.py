@@ -29,9 +29,9 @@ ADMIN_EMAIL = "rsdcruz97@gmail.com"
 
 DEMO_IDS =[
     'PA-1505304-BB9F3EB9FBCD498BB2F07BB62EE58B4E',
-    'AM-1300706-913A813EECC74CA5A6132C87A2937749',
-    'RO-1100015-14CB641F157841879704E86D3CC1E82D',
-    'MT-5103254-1882F7966B924166AC9FDD47FDA76662'
+    'AM-1301704-5F6515F5B115419F9114891B2D3A2C54',
+    'RO-1100205-F79D65912A3643AEA543049332BD109F',
+    'MT-5101605-503D1E16017740379EE73DB43DE1358C'
 ]
 
 async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Optional[str]:
@@ -72,7 +72,6 @@ def register_usage(email: str, car_id: str):
     supabase.table("usage_logs").insert({"email": email, "car_id": car_id}).execute()
 
 def censor_response(res: ComplianceResponse) -> ComplianceResponse:
-    res.geometry = None
     res.financial_liabilities = None
     res.environmental_score = None
     res.deforestation_metrics = None

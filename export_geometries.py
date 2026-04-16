@@ -22,19 +22,43 @@ if not GCP_KEY_PATH.exists():
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GCP_KEY_PATH)
 
 def process_and_insert_chunk(con, batch, table_name, first_chunk):
-    """Sanitização de Encoding e inserção no DuckDB"""
+    """Sanitização de tipos e inserção no DuckDB com Schema fixo"""
     df = pd.DataFrame(batch)
     
-    # Sanitização de Encoding (UTF-8) para evitar quebra no Parquet
-    for col in df.select_dtypes(include=['object']).columns:
-        df[col] = df[col].apply(
-            lambda x: str(x).encode('utf-8', 'replace').decode('utf-8') if x is not None else None
-        )
-    
+    # 1. Tratamento rigoroso de strings no Pandas
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            # Converte para string e garante que nulos sejam None (NULL no SQL)
+            df[col] = df[col].astype(str).replace({'None': None, 'nan': None, '<NA>': None})
+
     if first_chunk:
-        con.execute(f"CREATE TABLE {table_name} AS SELECT * FROM df")
+        # 2. FORÇAR SCHEMA: No primeiro chunk, construímos um SELECT que faz CAST 
+        # explícito para VARCHAR em todas as colunas que o Pandas identificou como 'object'.
+        # Isso impede que o DuckDB tente adivinhar tipos numéricos.
+        
+        cols_sql = []
+        for col in df.columns:
+            # Se a coluna for objeto/string, forçamos VARCHAR no DuckDB
+            if df[col].dtype == 'object':
+                cols_sql.append(f'CAST("{col}" AS VARCHAR) AS "{col}"')
+            else:
+                # Para float, int, etc, deixamos o DuckDB inferir normalmente
+                cols_sql.append(f'"{col}"')
+        
+        select_clause = ", ".join(cols_sql)
+        
+        # Cria a tabela com os tipos forçados
+        con.execute(f"CREATE TABLE {table_name} AS SELECT {select_clause} FROM df")
+        print(f"  ✅ Tabela {table_name} criada com schema protegido.")
     else:
-        con.execute(f"INSERT INTO {table_name} SELECT * FROM df")
+        # Nos lotes seguintes, a tabela já tem o schema correto (VARCHAR)
+        # O DuckDB aceitará tanto números quanto textos nessas colunas.
+        try:
+            con.execute(f"INSERT INTO {table_name} SELECT * FROM df")
+        except Exception as e:
+            print(f"❌ Erro crítico na inserção: {e}")
+            # Opcional: print(df.head()) para debugar se necessário
+            raise
 
 def export_to_gcs():
     # Inicializa clientes
@@ -50,7 +74,7 @@ def export_to_gcs():
     
     # LISTA DE TABELAS PARA EXPORTAÇÃO
     targets = [
-        #{"id": "fct_compliance_geometries_mart", "file": "fct_compliance_geometries.parquet"},
+        # {"id": "fct_compliance_geometries_mart", "file": "fct_compliance_geometries.parquet"},
         {"id": "fct_compliance_risk", "file": "fct_compliance_latest.parquet"}
     ]
 
