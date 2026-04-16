@@ -1,7 +1,10 @@
 import { AuditData } from '../types';
 import { formatCurrency, getCenterPoint } from '../utils';
 
-// Mapeamento exato do seu SQL
+/**
+ * 1. MAPEAMENTOS DE TRADUÇÃO (DICIONÁRIOS)
+ */
+
 export const producerSizeMap: Record<string, string> = {
   'MINIFÚNDIO': 'Minifúndio',
   'PEQUENA PROPRIEDADE': 'Pequena Propriedade',
@@ -10,201 +13,255 @@ export const producerSizeMap: Record<string, string> = {
   'NÃO CLASSIFICADO': 'Não Classificado'
 };
 
-// Cores técnicas para os badges de tamanho
+export const reliefMap: Record<string, string> = {
+  'FLAT': 'Plano',
+  'GENTLE': 'Suave Ondulado',
+  'UNDULATING': 'Ondulado',
+  'STRONGLY_UNDULATING': 'Forte Ondulado',
+  'MOUNTAINOUS': 'Montanhoso',
+  'ESCARPMENT': 'Escarpado'
+};
+
+export const logisticsRiskMap: Record<string, string> = {
+  'CRITICAL': 'Risco Crítico',
+  'HIGH': 'Risco Alto',
+  'MEDIUM': 'Risco Moderado',
+  'LOW': 'Risco Baixo',
+  'NEGLIGIBLE': 'Risco Irrelevante'
+};
+
+export const rlStatusMap: Record<string, string> = {
+  'CONFORME': 'Regular',
+  'DEFICIT': 'Déficit de Reserva',
+  'EM_REGULARIZACAO': 'Em Regularização (PRA)',
+  'NAO_APLICAVEL': 'Não Aplicável'
+};
+
+export const confidenceMap: Record<string, string> = {
+  'ULTRA_HIGH': 'Precisão Máxima',
+  'HIGH_CONFIDENCE': 'Alta Precisão',
+  'MEDIUM_CONFIDENCE': 'Precisão Moderada',
+  'LOW_CONFIDENCE': 'Baixa Precisão',
+  'DOUBLE_VERIFIED': 'Dupla Verificação',
+  'GIS': 'Satelital',
+  'MAPBIOMAS': 'MapBiomas',
+  'VECTOR ERROR': 'Erro de Vetor',
+  'PROTECTED AREA': 'Área Protegida',
+  'MICRO EMBARGO': 'Embargo Irrelevante',
+  'MICRO DEFORESTATION': 'Supressão Irrelevante',
+  'SENSOR NOISE': 'Ruído de Sensor',
+  'SLOPE': 'Declividade (Sensor)',
+  'BOUNDARY DISPUTE': 'Conflito de Limites',
+  'STATE VERIFIED': 'Validado pelo Estado',
+  'VALID SPATIAL INTERSECTION': 'Cruzamento Validado',
+  'OVERLAP': 'Sobreposição',
+  'MANUAL_REVIEW': 'Revisão Técnica',
+  'N/A': 'Não Avaliado'
+};
+
+export const mapbiomasClassMap: Record<string, string> = {
+  'forest': 'Floresta',
+  'savanna': 'Formação Savânica',
+  'mangrove': 'Manguezal',
+  'wetland': 'Área Úmida',
+  'grassland': 'Formação Campestre',
+  'pasture': 'Pastagem',
+  'agriculture': 'Agricultura',
+  'perennial_crop': 'Cultura Perpétua',
+  'non_vegetated': 'Área sem Vegetação',
+  'mining': 'Mineração',
+  'fire': 'Queimada',
+  'infrastructure': 'Infraestrutura',
+  'others': 'Outro Uso',
+  'water': 'Corpo d\'Água',
+  'urban': 'Área Urbana',
+  'snow_ice': 'Neve/Gelo',
+  'clouds': 'Nuvens',
+  'no_data': 'Sem Dados',
+  'ilegal_mining': 'Mineração Ilegal',
+  'deforestation': 'Desmatamento',
+  'degradation': 'Degradação',
+  'regeneration': 'Regeneração',
+  'reforestation': 'Reflorestamento',
+  'silviculture': 'Silvicultura',
+  'other_vegetation': 'Outra Vegetação'
+};
+
+/**
+ * 2. ESTILIZAÇÃO DE UI (BADGES E CORES)
+ */
+
+export const getSectionStatusStyle = (status: string | undefined | null) => {
+  const s = status?.toUpperCase() || '';
+  
+  // AMARELO/ORANGE: Alertas, Avisos e Pendências
+  if (s.includes('PENDENTE') || s.includes('ANÁLISE') || s.includes('WARNING') || s.includes('ALERTA') || s.includes('CONDITIONAL')) {
+    return 'bg-amber-50 text-amber-700 border-amber-200';
+  }
+  
+  // VERMELHO: Bloqueios e Inconsistências
+  if (s.includes('CANCELADO') || s.includes('SUSPENSO') || s.includes('INCONSISTENTE') || s.includes('BLOQUEADO')) {
+    return 'bg-red-50 text-red-700 border-red-200';
+  }
+  
+  // VERDE: Regularidade
+  if (s.includes('ATIVO') || s.includes('REGULAR') || s.includes('CONFORME')) {
+    return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  }
+
+  // AZUL: Manual Review e Padrão
+  if (s.includes('MANUAL') || s.includes('REVIEW')) {
+    return 'bg-blue-50 text-blue-700 border-blue-200';
+  }
+  
+  return 'bg-slate-50 text-slate-600 border-slate-200';
+};
+
 export const getSizeBadgeStyle = (size: string) => {
-  switch (size) {
-    case 'MINIFÚNDIO': return 'bg-blue-50 text-blue-700 border-blue-100';
-    case 'PEQUENA PROPRIEDADE': return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-    case 'MÉDIA PROPRIEDADE': return 'bg-orange-50 text-orange-700 border-orange-100';
-    case 'GRANDE PROPRIEDADE': return 'bg-slate-900 text-white border-slate-800';
-    default: return 'bg-slate-100 text-slate-600 border-slate-200';
-  }
+  const s = size?.toUpperCase() || '';
+  if (s.includes('MINIFÚNDIO')) return 'bg-slate-50 text-slate-600 border-slate-200';
+  if (s.includes('PEQUENA')) return 'bg-slate-100 text-slate-700 border-slate-300'; 
+  if (s.includes('MÉDIA')) return 'bg-slate-200 text-slate-800 border-slate-400';
+  if (s.includes('GRANDE')) return 'bg-slate-900 text-white border-slate-900';
+  return 'bg-white text-slate-400 border-slate-100';
 };
 
-export const carStatusMap: Record<string, string> = {
-  'AT': 'ATIVO',
-  'PE': 'PENDENTE',
-  'SU': 'SUSPENSO',
-  'ATIVO': 'ATIVO'
-};
-
-export const formattedDate = (d: any) => {
-  if (!d || d === 'None' || d === '1900-01-01' || d === '') return 'Não identificada';
+export const determineStatusColor = (statusRaw: string, confidenceRaw?: string): 'red' | 'orange' | 'green' | 'blue' => {
+  if (!statusRaw) return 'blue';
+  const s = statusRaw.toUpperCase();
   
-  try {
-    const date = new Date(d);
-    if (isNaN(date.getTime())) return 'Não identificada';
-    
-    return date.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      timeZone: 'UTC'
-    });
-  } catch (e) {
-    return 'Não identificada';
-  }
-};
-
-// lib/audit-utils.ts
-
-export const getAnalysisReason = (status: string, confidence: string) => {
-  const s = status.toUpperCase();
-
-  // 1. IDENTIDADES (PRODUTORES ESPECIAIS)
-  if (s.includes('SETTLEMENT PRODUCER')) return "Produtor Assentado: Imóvel em área de assentamento com ocupação regularizada identificada.";
-  if (s.includes('TRADITIONAL PRODUCER')) return "Comunidade Tradicional: Território ocupado por população tradicional com reconhecimento espacial.";
-  if (s.includes('QUILOMBOLA PRODUCER')) return "Produtor Quilombola: Imóvel em território quilombola com identidade reconhecida.";
-
-  // 2. BLOQUEIOS SOCIAIS E TERRITORIAIS
-  if (s.includes('SOCIAL RISK') || s.includes('SLAVE LABOR')) return "Violação Social: Titularidade vinculada ao Cadastro de Empregadores (Lista Suja do Trabalho Escravo).";
-  if (s.includes('INDIGENOUS LAND')) return "Restrição Crítica: O imóvel sobrepõe Terra Indígena homologada ou em estudo.";
-  if (s.includes('CONSERVATION UNIT')) return "Restrição Ambiental: Sobreposição detectada com Unidade de Conservação de Proteção Integral.";
-  if (s.includes('QUILOMBOLA (INVASION)')) return "Conflito Territorial: Sobreposição não autorizada com Território Quilombola.";
-  if (s.includes('SETTLEMENT (INVASION)')) return "Conflito Fundiário: Sobreposição detectada com Assentamento Rural (INCRA).";
+  if (s.includes('NOT ELIGIBLE') || s.includes('BLOQUEADO')) return 'red';
   
-  // 3. BLOQUEIOS POR DESMATAMENTO E EUDR
-  if (s.includes('APP DEFORESTATION')) return "Inconformidade Legal: Supressão de vegetação nativa em Área de Preservação Permanente (APP).";
-  if (s.includes('EUDR VIOLATION')) return "Inconformidade EUDR: Imóvel com restrição de exportação para a União Europeia devido a desmatamento pós-2020.";
-  if (s.includes('DEFORESTATION')) return "Inconformidade Ambiental: Supressão de vegetação nativa detectada e validada via monitoramento satelital.";
+  // WARNING/ALERTA/CONDITIONAL -> ORANGE (AMARELO)
+  if (
+    s.includes('WARNING') || 
+    s.includes('CONDITIONAL') || 
+    s.includes('PENDENTE') || 
+    s.includes('ALERTA') || 
+    s.includes('RISK') || 
+    s.includes('ADJACENCY')
+  ) return 'orange';
   
-  // 4. EMBARGOS (INCLUINDO ÓRGÃOS ESPECÍFICOS DO SEU SQL: SEMA, SIGA, IBAMA)
-  if (s.includes('EMBARGO') || s.includes('SEMA_MT') || s.includes('SIGA_MT') || s.includes('ICMBIO') || s.includes('IBAMA')) {
-    return "Embargo Administrativo: Restrição ativa vinculada a órgãos fiscalizadores (IBAMA, SEMA-MT ou ICMBio).";
-  }
+  if (s.startsWith('ELIGIBLE') || s.includes('CONFORME')) return 'green';
   
-  // 5. BLOQUEIOS TÉCNICOS
-  if (s.includes('CAR STATUS')) return "Irregularidade Cadastral: O registro do CAR encontra-se Cancelado ou Suspenso no sistema nacional.";
-  if (s.includes('INVALID GEOMETRY')) return "Erro Técnico: Geometria do imóvel inválida ou inexistente para processamento automático.";
-  if (s.includes('SATELLITE (SLOPE)')) return "Restrição Técnica: Declividade do terreno superior ao limite permitido para exploração segura.";
-
-  // 6. REVISÕES E ALERTAS
-  if (s.includes('UNUSUAL AREA')) return "Revisão Obrigatória: Dimensão do imóvel incompatível com os limites usuais para esta categoria de produtor.";
-  if (s.includes('RISK BY ADJACENCY')) return "Risco por Adjacência: Identificado passivo ambiental crítico em imóvel confrontante com alto potencial de contágio.";
-  if (s.includes('WARNING') || s.includes('CONDITIONAL')) return "Conformidade Condicional: Identificados alertas ou déficits ambientais que requerem regularização.";
-
-  // 7. SALVA-VIDAS PARA QUALQUER "NOT ELIGIBLE" NÃO MAPEADO ACIMA
-  if (s.startsWith('NOT ELIGIBLE')) {
-    return "Inconformidade Detectada: O imóvel apresenta restrições socioambientais críticas que impedem a elegibilidade.";
-  }
-
-  // 8. CASOS DE SUCESSO OU INCERTEZA
-  if (confidence.toUpperCase().includes('LOW')) return "Incerteza Cartográfica: O imóvel requer validação documental devido ao baixo nível de confiança na base geoespacial.";
-  if (s === 'ELIGIBLE') return "Análise concluída: O imóvel atende aos critérios de conformidade socioambiental vigentes.";
-
-  return "Análise de Risco: Verifique as evidências detalhadas abaixo para o parecer final de conformidade.";
-};
-
-export const determineStatusColor = (statusRaw: string, confidence: string): 'red' | 'orange' | 'green' | 'blue' => {
-  const status = statusRaw.toUpperCase();
-  const conf = confidence.toUpperCase();
-
-  // 1. VERMELHO: Bloqueio explícito
-  if (status.includes('NOT ELIGIBLE')) return 'red';
-
-  // 2. LARANJA: Alertas e Condicionais
-  if (status.includes('WARNING') || status.includes('CONDITIONAL')) return 'orange';
-
-  // 3. AZUL: Revisão Manual OU Elegível com Baixa Confiança
-  if (status.includes('MANUAL_REVIEW') || status.includes('AWAITING') || conf.includes('LOW')) {
-    return 'blue';
-  }
-
-  // 4. VERDE: Elegível com Confiança Alta/Média
-  if (status.startsWith('ELIGIBLE')) return 'green';
-
+  // MANUAL REVIEW -> BLUE
+  if (s.includes('MANUAL') || s.includes('REVIEW')) return 'blue';
+  
   return 'blue';
 };
 
-export const deforestationTypeMap: Record<string, string> = {
-  'agriculture': 'Agricultura',
-  'pasture': 'Pastagem',
-  'mining': 'Mineração',
-  'ilegal_mining': 'Mineração Ilegal',
-  'other': 'Outros / Não Identificado',
-  'others': 'Outros / Não Identificado',
-  'natural_regeneration': 'Regeneração Natural',
-  'infrastructure': 'Infraestrutura',
-  'fire': 'Queimada / Incêndio',
-  'forestry': 'Silvicultura'
+export const getStatusBadge = (isTechnicallyBlocked: boolean, status: string) => {
+  const s = status?.toUpperCase() || '';
+  if (s.includes('NOT ELIGIBLE') || isTechnicallyBlocked) return { label: 'OPERAÇÃO BLOQUEADA', color: 'red' };
+  if (s.includes('PRODUCER')) return { label: 'PRODUTOR REGULARIZADO', color: 'green' };
+  
+  // MANUAL REVIEW -> BLUE
+  if (s.includes('MANUAL_REVIEW')) return { label: 'REVISÃO OBRIGATÓRIA', color: 'blue' };
+  
+  // WARNING/ALERTA/CONDITIONAL -> ORANGE
+  if (s.includes('WARNING') || s.includes('ALERTA') || s.includes('ADJACENCY') || s.includes('CONDITIONAL')) return { label: 'ALERTA DE COMPLIANCE', color: 'orange' };
+
+  if (s.startsWith('ELIGIBLE')) return { label: 'COMPLIANCE VERIFICADO', color: 'green' };
+  
+  return { label: 'EM ANÁLISE', color: 'blue' };
+};
+
+/**
+ * 3. LÓGICA DE TRADUÇÃO E FORMATAÇÃO
+ */
+
+export const translateConfidence = (confidenceRaw: string) => {
+  if (!confidenceRaw || confidenceRaw === 'N/A') return 'Análise em Processamento';
+  return confidenceRaw
+    .split(/[\s\-_()+|]+/)
+    .map(part => part.trim().toUpperCase())
+    .filter(part => part !== "" && part !== "STATUS" && part !== "CONFIDANÇA")
+    .map(part => confidenceMap[part] || part) 
+    .join(' ');
+};
+
+export const translateStatus = (statusRaw: string) => {
+  if (!statusRaw) return 'NÃO IDENTIFICADO';
+  const s = statusRaw.toUpperCase();
+  if (s.includes('NOT ELIGIBLE')) return 'BLOQUEADO';
+  if (s.includes('ELIGIBLE')) return 'CONFORME';
+  if (s.includes('MANUAL_REVIEW')) return 'NECESSITA REVISÃO MANUAL';
+  if (s.includes('WARNING')) return 'ALERTA';
+  if (s.includes('CONDITIONAL')) return 'CONDICIONAL';
+  return s;
 };
 
 export const translateDeforestationTypes = (types: string) => {
   if (!types || types === 'N/A') return 'Não especificada';
-  // O segredo está no split(/[| ,]+/) que aceita tanto vírgula quanto a barra |
-  return types.split(/[| ,]+/)
-    .map(t => t.trim().toLowerCase())
-    .filter(t => t !== "")
-    .map(t => deforestationTypeMap[t] || t) 
+  return types
+    .split(/[| ,;]+/)
+    .map(t => mapbiomasClassMap[t.trim().toLowerCase()] || t)
     .join(', ');
 };
 
-export const confidenceMap: Record<string, string> = {
-  'HIGH_CONFIDENCE': 'Alta Precisão',
-  'MEDIUM_CONFIDENCE': 'Precisão Moderada',
-  'LOW_CONFIDENCE': 'Baixa Precisão',
-  'VECTOR ERROR (PROTECTED AREA)': 'Inconsistência de Vetor em Área Protegida',
-  'MICRO EMBARGO': 'Embargo de Extensão Irrelevante (Ruído)',
-  'MICRO DEFORESTATION': 'Supressão de Extensão Irrelevante (Ruído)',
-  'SENSOR NOISE (SLOPE)': 'Ruído de Sensor em Declividade Elevada',
-  'BOUNDARY DISPUTE': 'Conflito de Limites Geográficos',
-  'STATE VERIFIED': 'Validado pela Base Estadual (Premium)',
-  'VALID SPATIAL INTERSECTION': 'Cruzamento Espacial Validado',
-  'OVERLAP': 'Sobreposição de Perímetros',
-  'INCONSISTENT DATA': 'Dados Cadastrais Inconsistentes',
-  'OUTDATED IMAGERY': 'Defasagem de Imagens Satelitais',
-  'MANUAL_REVIEW': 'Necessita Revisão Técnica',
-  'N/A': 'Não Avaliado'
-};
+/**
+ * 4. MOTIVO DA ANÁLISE (ALINHADO COM O SQL)
+ */
+export const getAnalysisReason = (status: string, confidence?: string) => {
+  if (!status) return "Análise de Risco: Verifique as evidências detalhadas abaixo.";
+  const s = status.toUpperCase();
 
-export const translateConfidence = (confidenceRaw: string) => {
-  if (!confidenceRaw || confidenceRaw === 'N/A') return 'Análise em Processamento';
-
-  return confidenceRaw.split(/[-]+/)
-    .map(part => part.trim().toUpperCase())
-    .map(part => confidenceMap[part] || part) 
-    .join(': ');
-};
-
-export const formatListFromSql = (text: string | null) => {
-  if (!text || text === 'None' || text === '') return [];
-  return text.split('|').map(item => item.trim());
-};
-
-export const getStatusBadge = (isTechnicallyBlocked: boolean, status: string) => {
-  // Se o status for NOT ELIGIBLE ou se a flag de bloqueio técnico for TRUE
-  if (status.includes('NOT ELIGIBLE') || isTechnicallyBlocked) {
-    return { label: 'OPERAÇÃO BLOQUEADA', color: 'red' };
-  }
+  // Bloqueios Críticos (Nível 1 e 2 do SQL)
+  if (s.includes('SLAVE LABOR')) return "Violação Social: Titularidade vinculada à Lista Suja do Trabalho Escravo (MTE).";
+  if (s.includes('AMZ EMBARGO') || s.includes('5.081')) return "Restrição Crítica (CMN 5.081): Embargo em bioma Amazônia detectado.";
+  if (s.includes('EMBARGO')) return "Embargo Administrativo: Restrição ativa vinculada a órgãos fiscalizadores (IBAMA/SEMA).";
+  if (s.includes('DEFORESTATION (MAPBIOMAS)')) return "Inconformidade Ambiental: Supressão de vegetação nativa detectada pelo MapBiomas.";
+  if (s.includes('EUDR VIOLATION')) return "Inconformidade EUDR: Restrição de exportação por desmatamento pós-2020.";
+  if (s.includes('APP DEFORESTATION')) return "Inconformidade Legal: Supressão de vegetação em Área de Preservação Permanente (APP).";
+  if (s.includes('STRUCTURED ENVIRONMENTAL RISK')) return "Risco Estruturado: Associação de desmatamento com infraestrutura logística crítica.";
   
-  if (status.includes('PRODUCER')) {
-    return { label: 'PRODUTOR REGULARIZADO', color: 'green' };
-  }
+  // Invasões Territoriais
+  if (s.includes('INDIGENOUS LAND')) return "Restrição Territorial: O imóvel sobrepõe Terra Indígena homologada.";
+  if (s.includes('CONSERVATION UNIT')) return "Restrição Territorial: Sobreposição com Unidade de Conservação.";
+  if (s.includes('QUILOMBOLA (INVASION)')) return "Restrição Territorial: Sobreposição com Território Quilombola.";
+  if (s.includes('SETTLEMENT (INVASION)')) return "Restrição Territorial: Sobreposição com Assentamento Incra.";
+  
+  // Jurídico e Técnico
+  if (s.includes('CAR STATUS')) return "Irregularidade Cadastral: O registro do CAR encontra-se Cancelado ou Suspenso.";
+  if (s.includes('INVALID GEOMETRY')) return "Erro Técnico: Geometria do imóvel inválida ou ausente.";
+  if (s.includes('POTENTIAL AREA FRAUD')) return "Alerta de Fraude: Divergência crítica (>50%) entre área declarada e geometria.";
+  if (s.includes('INCONSISTENT AREA')) return "Inconsistência de Dados: Área processada diverge do valor declarado na origem.";
+  
+  // Identidades Especiais (Elegíveis)
+  if (s.includes('INDIGENOUS PRODUCER')) return "Produtor Indígena: Imóvel em TI com manejo autorizado.";
+  if (s.includes('SETTLEMENT PRODUCER')) return "Produtor Assentado: Imóvel em área de assentamento regularizado.";
+  if (s.includes('QUILOMBOLA PRODUCER')) return "Produtor Quilombola: Imóvel em território quilombola reconhecido.";
 
-  if (status.includes('MANUAL_REVIEW') || status.includes('AWAITING')) {
-    return { label: 'REVISÃO TÉCNICA OBRIGATÓRIA', color: 'blue' };
-  }
+  // Riscos Indiretos e Alertas
+  if (s.includes('MITIGATED ADJACENCY')) return "Risco de Adjacência Mitigado: Existe barreira física (rio/estrada) protegendo o imóvel.";
+  if (s.includes('LAUNDERING')) return "Risco de Lavagem: Proximidade crítica com áreas de desmatamento (Triangulação).";
+  if (s.includes('RISK BY ADJACENCY')) return "Risco por Adjacência: Passivo ambiental crítico em imóvel confrontante.";
+  if (s.includes('RL DEFICIT')) return "Déficit de Reserva Legal: Área de vegetação inferior ao exigido pelo Código Florestal.";
 
-  if (status === 'ELIGIBLE') {
-    return { label: 'COMPLIANCE VERIFICADO', color: 'green' };
-  }
+  if (s.includes('NOT ELIGIBLE')) return "Inconformidade Detectada: O imóvel apresenta restrições socioambientais impeditivas.";
+  if (s.includes('ELIGIBLE')) return "Conformidade Verificada: O imóvel atende aos critérios socioambientais e normativos.";
 
-  return { label: 'EM ANÁLISE', color: 'blue' };
+  return "Análise de Risco: Verifique as evidências detalhadas abaixo.";
 };
 
-export const statusLabelMap: Record<string, string> = {
-  'ELIGIBLE': 'CONFORME',
-  'NOT ELIGIBLE': 'BLOQUEADO',
-  'WARNING': 'ALERTA',
-  'CONDITIONAL': 'CONDICIONAL',
-  'MANUAL_REVIEW': 'REVISÃO',
-  'MANUAL_REVIEW_REQUIRED': 'REVISÃO',
-  'AWAITING_MANUAL_VALIDATION': 'AGUARDANDO',
-  'UNKNOWN': 'NÃO IDENTIFICADO'
+/**
+ * 5. AUXILIARES DE FORMATAÇÃO DE DADOS
+ */
+
+export const formattedDate = (d: any) => {
+  if (!d || d === 'None' || d === '1900-01-01' || d === '') return 'Não identificada';
+  try {
+    const date = new Date(d);
+    return isNaN(date.getTime()) ? 'Não identificada' : date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
+  } catch { return 'Não identificada'; }
 };
 
-// Função para pegar apenas o rótulo traduzido
-export const translateStatus = (statusRaw: string) => {
-  const mainStatus = statusRaw.split(' - ')[0].toUpperCase();
-  return statusLabelMap[mainStatus] || mainStatus;
+export const formatEvidenceList = (evidenceString: string): string[] => {
+  if (!evidenceString) return [];
+  return evidenceString.split('|').map(s => s.trim()).filter(s => s !== '');
+};
+
+export const formatLiability = (value: number) => {
+  if (!value || value <= 0) return 'R$ 0,00';
+  return formatCurrency(value);
 };

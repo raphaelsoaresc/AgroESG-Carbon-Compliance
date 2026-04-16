@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { AuditData, DEMO_IDS } from '../types';
 import {
@@ -20,6 +20,9 @@ export function useAudit() {
   const [preferenceId, setPreferenceId] = useState<string | null>(null);
   const [limitReached, setLimitReached] = useState(false);
 
+  // REF para controlar o contador sem disparar a recriação da função performSearch
+  const searchCountRef = useRef(0);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -37,11 +40,12 @@ export function useAudit() {
     if (savedCount && !isAdmin) {
       const count = parseInt(savedCount);
       setSearchCount(count);
+      searchCountRef.current = count; // Sincroniza a REF
       if (count >= 3) setLimitReached(true);
     }
   }, [isAdmin]);
 
-  const handleUnlockReport = async () => {
+  const handleUnlockReport = useCallback(async () => {
     setLoading(true);
     try {
       const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
@@ -62,15 +66,16 @@ export function useAudit() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [carId]);
 
-  const performSearch = async (idToSearch: string) => {
+  const performSearch = useCallback(async (idToSearch: string) => {
     if (!idToSearch) return;
 
     const { data: { session: freshSession } } = await supabase.auth.getSession();
     const isDemo = DEMO_IDS.includes(idToSearch);
 
-    if (!isDemo && !freshSession && searchCount >= 3) {
+    // Usa a REF para checar o limite, evitando dependência direta do estado searchCount
+    if (!isDemo && !freshSession && searchCountRef.current >= 3) {
       setLimitReached(true);
       setCarId(idToSearch);
       setData(null);
@@ -101,7 +106,6 @@ export function useAudit() {
       
       const record = await response.json();
       
-      // Helper para garantir que geometrias em string sejam convertidas em objetos
       const parseGeom = (g: any) => {
         if (!g) return null;
         return typeof g === 'string' ? JSON.parse(g) : g;
@@ -110,128 +114,112 @@ export function useAudit() {
       const mainGeometry = parseGeom(record.geom_car_total || record.geometry);
 
       if (!isDemo && !freshSession) {
-        const newCount = searchCount + 1;
-        setSearchCount(newCount);
+        const newCount = searchCountRef.current + 1;
+        searchCountRef.current = newCount; // Atualiza a REF imediatamente
+        setSearchCount(newCount); // Atualiza o estado para a UI
         localStorage.setItem('caipora_search_count', newCount.toString());
         if (newCount >= 3) setLimitReached(true);
       }
 
-      // MAPEAMENTO INTEGRAL E EXAUSTIVO DA API PARA O ESTADO
+      // MAPEAMENTO SINCRONIZADO COM SCHEMAS.PY E TYPES.TS
       setData({
         // 1. Identificação Básica
         propertyId: record.property_id,
         propertyAlias: record.property_alias,
-        carNumber: record.property_id,
-        area: record.property_area_ha,
-        areaHa: record.area_ha,
-        propertyAreaHa: record.property_area_ha,
+        property_identity_type: record.property_identity_type,
+        area_ha: record.area_ha,
+        area_geometria_ha: record.area_geometria_ha,
+        property_area_ha: record.property_area_ha,
+        area_liquida_ha: record.area_liquida_ha,
+        fiscal_modules: record.fiscal_modules,
         city: record.city,
-        uf: record.uf_origem,
-        carStatus: record.car_status || 'ATIVO',
+        uf_origem: record.uf_origem,
+        car_status: record.car_status,
+        // Nova Coluna: Auditoria de Status
+        car_status_spatial: record.car_status_spatial,
 
-        // 2. Localização e Perícia Física
+        // 2. Localização e Perícia
         latitude: record.latitude,
         longitude: record.longitude,
-        carBbox: record.car_bbox,
-        mapCenterCoords: [record.latitude, record.longitude],
-        maxSlopeDegrees: record.max_slope_degrees,
-        relief: record.relief_classification || 'Nível',
+        geometry: mainGeometry,
+        // Nova Coluna: Centroide
+        centroid: parseGeom(record.centroid),
+        car_bbox: record.car_bbox,
+        critical_contact_point: record.critical_contact_point,
+        max_slope_degrees: record.max_slope_degrees,
+        relief_classification: record.relief_classification,
 
-        // 3. Status de Elegibilidade e Confiança
+        // 3. Identidades e Categorias
+        is_settlement_identity: record.is_settlement_identity,
+        is_traditional_identity: record.is_traditional_identity,
+        is_quilombo_identity: record.is_quilombo_identity,
+        is_ti_identity: record.is_ti_identity,
+        is_uc_identity: record.is_uc_identity,
+        producer_size_category: record.producer_size_category,
+        is_small_holder: record.is_small_holder,
+
+        // 4. Status e Confiança
+        final_eligibility_status: record.final_eligibility_status,
+        final_eligibility_status_detailed: record.final_eligibility_status_detailed,
+        is_technically_blocked: record.is_technically_blocked,
+        is_missing_geometry: record.is_missing_geometry,
+        geospatial_confidence_level: record.geospatial_confidence_level,
+        data_reliability_index: record.data_reliability_index,
+        data_source_quality: record.data_source_quality,
+        forensic_summary: record.forensic_summary,
+        analyzed_at: record.analyzed_at,
+        processed_at: record.processed_at,
+
+        // 5. Objetos Complexos (Mapeamento Direto)
+        financial_liabilities: record.financial_liabilities,
+        environmental_score: record.environmental_score,
+        deforestation_metrics: record.deforestation_metrics,
+        social_score: record.social_score,
+        risk_analysis: record.risk_analysis,
+
+        // 6. Geometrias Adicionais
+        geom_car_total: mainGeometry,
+        geom_embargos: parseGeom(record.geom_embargos),
+        geom_desmatamento: parseGeom(record.geom_desmatamento),
+        geom_eudr: parseGeom(record.geom_eudr),
+        geom_areas_protegidas: parseGeom(record.geom_areas_protegidas),
+        geom_assentamentos: parseGeom(record.geom_assentamentos),
+        geom_conflito_app: parseGeom(record.geom_conflito_app),
+        geom_adjacencia_risco: parseGeom(record.geom_adjacencia_risco),
+
+        // --- UI HELPERS ---
+        carNumber: record.property_id,
         status: record.final_eligibility_status,
-        statusDetailed: record.final_eligibility_status_detailed,
-        finalEligibilityStatus: record.final_eligibility_status,
-        finalEligibilityStatusDetailed: record.final_eligibility_status_detailed,
-        isTechnicallyBlocked: record.is_technically_blocked,
-        dataReliabilityIndex: record.data_reliability_index || 0,
-        confidenceLevel: translateConfidence(record.geospatial_confidence_level),
-        geospatialConfidenceLevel: record.geospatial_confidence_level,
-        forensicSummary: record.forensic_summary,
-        analysisReason: record.forensic_summary || getAnalysisReason(record.final_eligibility_status, record.geospatial_confidence_level),
-        processedAt: formattedDate(record.processed_at),
-        analyzedAt: formattedDate(record.analyzed_at || record.processed_at),
-
-        // 4. Identidades e Categorias de Produtor
-        isSettlementIdentity: record.is_settlement_identity,
-        isTraditionalIdentity: record.is_traditional_identity,
-        isQuilomboIdentity: record.is_quilombo_identity,
-        isTiIdentity: record.is_ti_identity,
-        isUcIdentity: record.is_uc_identity,
-        isSmallHolder: record.is_small_holder,
-        producerSizeCategory: record.producer_size_category || 'N/A',
-
-        // 5. Objetos Brutos da API (Garantia de redundância)
-        financialLiabilities: record.financial_liabilities,
-        environmentalScore: record.environmental_score,
-        deforestationMetrics: record.deforestation_metrics,
-        socialScore: record.social_score,
-        riskAnalysis: record.risk_analysis,
-
-        // 6. Passivos Financeiros (Formatados para UI)
+        color: determineStatusColor(record.final_eligibility_status, record.geospatial_confidence_level),
+        metrics: `Bioma: ${record.environmental_score?.biome_name || 'N/A'} | Confiança: ${translateConfidence(record.geospatial_confidence_level)}`,
+        isCensored: !!freshSession ? false : !isDemo,
+        mapCenterCoords: [record.latitude, record.longitude],
+        
         liabilityTotal: formatCurrency(record.financial_liabilities?.estimated_financial_liability_brl || 0),
         liabilityAmbientalTotal: formatCurrency(
           (record.financial_liabilities?.liability_deforestation_brl || 0) + 
           (record.financial_liabilities?.liability_rl_brl || 0) +
           (record.financial_liabilities?.liability_app_brl || 0)
         ),
-        liabilityEmbargo: formatCurrency(record.financial_liabilities?.liability_embargo_brl || 0),
-        liabilityProtected: formatCurrency(record.financial_liabilities?.liability_protected_areas_brl || 0),
-        liabilitySocial: formatCurrency(record.financial_liabilities?.liability_social_brl || 0),
-        liabilityDeforestation: record.deforestation_metrics?.mapbiomas_deforested_ha 
-          ? `${record.deforestation_metrics.mapbiomas_deforested_ha.toFixed(2)} ha` 
-          : "0.00 ha",
-        liabilityRL: formatCurrency(record.financial_liabilities?.liability_rl_brl || 0),
-        liabilityAPP: formatCurrency(record.financial_liabilities?.liability_app_brl || 0),
 
-        // 7. Ambiental e Risco (Campos extraídos)
-        biomeName: record.environmental_score?.biome_name,
-        rlStatus: record.environmental_score?.rl_status,
-        isLiabilityUncertain: record.environmental_score?.is_liability_uncertain || false,
-        historicalWarnings: record.environmental_score?.historical_warnings,
-        maxAdjacencyScore: record.risk_analysis?.max_adjacency_score || 0,
-        adjacentRoads: record.risk_analysis?.adjacent_roads,
-        cityDataSourceOrigin: record.risk_analysis?.city_data_source_origin,
-        internalRisks: record.risk_analysis?.internal_risks_found,
-        embargoProcesses: record.risk_analysis?.embargo_processes,
-        embargoOffenders: record.risk_analysis?.embargo_offenders,
-        mapbiomasUrl: record.deforestation_metrics?.official_reports_urls,
-        mapbiomasAlertIds: record.deforestation_metrics?.mapbiomas_alert_ids,
-        liabilityDeforestationHa: record.deforestation_metrics?.mapbiomas_deforested_ha,
-
-        // 8. Gavetas de Evidências (Perícia)
-        evidenceAdmin: record.risk_analysis?.evidence_admin,
-        evidenceSocial: record.risk_analysis?.evidence_social,
-        evidenceEnvironmental: record.risk_analysis?.evidence_environmental,
-        evidenceInfrastructure: record.risk_analysis?.evidence_infrastructure,
-        evidenceList: [],
-
-        // 9. Geometrias (GeoJSON para o Mapa)
-        geometry: mainGeometry,
-        geom_car_total: mainGeometry,
-        geom_embargos: parseGeom(record.geom_embargos || record.geom_embargo),
-        geom_desmatamento: parseGeom(record.geom_desmatamento),
-        geom_eudr: parseGeom(record.geom_eudr),
-        geom_areas_protegidas: parseGeom(record.geom_areas_protegidas),
-        geom_conflito_app: parseGeom(record.geom_conflito_app),
-        geom_assentamentos: parseGeom(record.geom_assentamentos),
-        geom_adjacencia_risco: parseGeom(record.geom_adjacencia_risco),
-
-        // 10. UI Helpers
-        color: determineStatusColor(record.final_eligibility_status, record.geospatial_confidence_level),
-        metrics: `Bioma: ${record.environmental_score?.biome_name || 'N/A'} | Confiança: ${record.geospatial_confidence_level}`,
-        isCensored: !!freshSession ? false : !isDemo,
+        evidenceList: [
+          ...(record.risk_analysis?.evidence_admin ? record.risk_analysis.evidence_admin.split(' | ') : []),
+          ...(record.risk_analysis?.evidence_social ? record.risk_analysis.evidence_social.split(' | ') : []),
+          ...(record.risk_analysis?.evidence_environmental ? record.risk_analysis.evidence_environmental.split(' | ') : []),
+          ...(record.risk_analysis?.evidence_infrastructure ? record.risk_analysis.evidence_infrastructure.split(' | ') : []),
+        ],
       });
     } catch (error) {
       console.error("Erro na busca de compliance:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // Dependência VAZIA: A função nunca muda, matando o loop infinito.
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await supabase.auth.signOut();
     window.location.reload();
-  };
+  }, []);
 
   return { 
     carId, 
