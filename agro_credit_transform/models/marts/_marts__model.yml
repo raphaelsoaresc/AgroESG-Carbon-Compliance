@@ -262,3 +262,42 @@ models:
         data_tests:
           - dbt_utils.expression_is_true:
               expression: "> 0.5" # Filtro de ruído definido no SQL
+
+  - name: fct_property_investment_intelligence
+    description: "Mart de inteligência de ativos e rating de investimento."
+    columns:
+      - name: property_id
+        tests:
+          - unique
+          - not_null
+
+      - name: investment_score
+        description: "Score final ponderado pelo multiplicador de liquidez."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+
+      - name: land_use_efficiency_pct
+        description: "Percentual de área consolidada em relação à área total."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+
+      - name: investment_rating
+        tests:
+          - accepted_values:
+              values: [
+                'AAA - Premium Asset',
+                'AA - High Productivity',
+                'A - Operational',
+                'B - Turnaround Opportunity',
+                'C - High Risk / Distressed',
+                'D - Low Potential'
+              ]
+
+      - name: estimated_regularization_cost_brl
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"

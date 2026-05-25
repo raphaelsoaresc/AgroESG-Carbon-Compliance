@@ -3,11 +3,35 @@ import Link from 'next/link';
 import Image from 'next/image';
 
 export default function Institucional() {
+  // Dados atualizados com todos os 27 estados
   const stateData = [
-    { uf: 'PA', props: '378.395', area: '58.1', falsos: '111.882', eudr: '57.339', cmn: '19.076', adj: '334.542' },
-    { uf: 'MT', props: '211.773', area: '77.6', falsos: '85.954', eudr: '12.815', cmn: '26.629', adj: '202.346' },
-    { uf: 'RO', props: '188.623', area: '15.7', falsos: '44.308', eudr: '18.204', cmn: '11.215', adj: '159.054' },
-    { uf: 'AM', props: '98.080', area: '21.6', falsos: '24.149', eudr: '14.196', cmn: '7.296', adj: '72.296' },
+    { uf: 'BA', props: '1.278.858', area: '38.0', falsos: '3.633', eudr: '35.578', cmn: '0', adj: '364.091' },
+    { uf: 'MG', props: '1.160.867', area: '55.6', falsos: '1.241', eudr: '25.604', cmn: '0', adj: '437.279' },
+    { uf: 'RS', props: '667.589', area: '24.9', falsos: '1.132', eudr: '8.972', cmn: '0', adj: '214.582' },
+    { uf: 'PR', props: '552.963', area: '19.2', falsos: '3.396', eudr: '5.485', cmn: '0', adj: '214.312' },
+    { uf: 'SP', props: '465.623', area: '23.8', falsos: '1.796', eudr: '609', cmn: '0', adj: '329.900' },
+    { uf: 'PE', props: '431.711', area: '8.0', falsos: '1.586', eudr: '16.049', cmn: '0', adj: '191.066' },
+    { uf: 'SC', props: '428.105', area: '8.7', falsos: '1.054', eudr: '3.720', cmn: '0', adj: '131.191' },
+    { uf: 'MA', props: '409.665', area: '32.8', falsos: '3.520', eudr: '36.455', cmn: '909', adj: '270.631' },
+    { uf: 'CE', props: '405.132', area: '12.1', falsos: '1.242', eudr: '26.864', cmn: '0', adj: '259.549' },
+    { uf: 'PA', props: '381.583', area: '58.3', falsos: '4.380', eudr: '58.205', cmn: '21.649', adj: '336.297' },
+    { uf: 'PI', props: '331.914', area: '20.7', falsos: '536', eudr: '23.208', cmn: '0', adj: '181.405' },
+    { uf: 'GO', props: '237.866', area: '33.9', falsos: '1.575', eudr: '9.838', cmn: '0', adj: '189.981' },
+    { uf: 'PB', props: '215.927', area: '4.8', falsos: '1.780', eudr: '9.336', cmn: '0', adj: '94.132' },
+    { uf: 'MT', props: '213.370', area: '77.9', falsos: '52.476', eudr: '12.920', cmn: '22.980', adj: '200.728' },
+    { uf: 'RO', props: '189.679', area: '15.7', falsos: '782', eudr: '18.225', cmn: '13.242', adj: '159.102' },
+    { uf: 'AL', props: '142.814', area: '2.6', falsos: '2.151', eudr: '2.155', cmn: '0', adj: '54.079' },
+    { uf: 'ES', props: '128.130', area: '4.0', falsos: '16', eudr: '856', cmn: '0', adj: '38.819' },
+    { uf: 'SE', props: '122.024', area: '2.0', falsos: '314', eudr: '2.692', cmn: '0', adj: '49.022' },
+    { uf: 'RN', props: '116.034', area: '4.5', falsos: '3.788', eudr: '3.742', cmn: '0', adj: '45.567' },
+    { uf: 'TO', props: '109.034', area: '25.4', falsos: '519', eudr: '12.590', cmn: '335', adj: '97.485' },
+    { uf: 'AM', props: '98.218', area: '21.6', falsos: '6.257', eudr: '14.366', cmn: '8.416', adj: '72.258' },
+    { uf: 'MS', props: '88.318', area: '30.0', falsos: '1.253', eudr: '3.467', cmn: '0', adj: '54.879' },
+    { uf: 'RJ', props: '68.099', area: '3.2', falsos: '93', eudr: '378', cmn: '0', adj: '26.089' },
+    { uf: 'AC', props: '60.650', area: '6.6', falsos: '224', eudr: '20.997', cmn: '8.903', adj: '56.834' },
+    { uf: 'RR', props: '29.793', area: '8.5', falsos: '550', eudr: '6.748', cmn: '3.247', adj: '27.757' },
+    { uf: 'DF', props: '20.965', area: '0.8', falsos: '6', eudr: '96', cmn: '0', adj: '20.876' },
+    { uf: 'AP', props: '17.400', area: '3.4', falsos: '60', eudr: '684', cmn: '630', adj: '12.210' },
   ];
 
   return (
@@ -59,7 +83,7 @@ export default function Institucional() {
              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent flex items-end p-12">
                 <div className="space-y-2">
                   <p className="text-green-400 font-black uppercase tracking-widest text-xs">Intelligence Engine</p>
-                  <p className="text-white font-mono text-lg">Caipora Sentinela: Auditoria de 876k imóveis em segundos.</p>
+                  <p className="text-white font-mono text-lg">Caipora Sentinela: Auditoria de 8.3M imóveis em segundos.</p>
                 </div>
              </div>
           </div>
@@ -95,7 +119,7 @@ export default function Institucional() {
               },
               { 
                 title: "Data-as-a-Service (DaaS)", 
-                desc: "Acesso a datasets em GeoParquet com +870k registros. Sincronização dinâmica a cada 7-15 dias para máxima fidelidade geoespacial.", 
+                desc: "Acesso a datasets em GeoParquet com +8.3M registros. Sincronização dinâmica a cada 7-15 dias para máxima fidelidade geoespacial.", 
                 icon: "📦" 
               }
             ].map((item, i) => (
@@ -174,23 +198,23 @@ export default function Institucional() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-20 space-y-6">
             <span className="text-green-400 font-black uppercase tracking-[0.3em] text-sm">Impacto em Escala</span>
-            <h2 className="text-5xl font-black uppercase tracking-tighter text-white">173 Milhões de Hectares</h2>
+            <h2 className="text-5xl font-black uppercase tracking-tighter text-white">547 Milhões de Hectares</h2>
             <p className="text-xl text-slate-400 max-w-3xl mx-auto font-medium">
-              Volume de dados processados e riscos mitigados pelo nosso motor de inteligência em tempo real.
+              Volume de dados processados e riscos mitigados pelo nosso motor de inteligência em tempo real em todo o território nacional.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
             {[
-              { label: "Área Monitorada", value: "173 Mi", suffix: "ha", color: "text-white" },
-              { label: "Propriedades Analisadas", value: "876.871", suffix: "", color: "text-white" },
-              { label: "Violações EUDR Barradas", value: "102.554", suffix: "", color: "text-red-400" },
-              { label: "Falsos Positivos Mitigados*", value: "266.293", suffix: "", color: "text-green-400" }
+              { label: "Área Monitorada", value: "547 Mi", suffix: "ha", color: "text-white" },
+              { label: "Propriedades Analisadas", value: "8.372.331", suffix: "", color: "text-white" },
+              { label: "Violações EUDR Barradas", value: "359.839", suffix: "", color: "text-red-400" },
+              { label: "Falsos Positivos Mitigados*", value: "95.360", suffix: "", color: "text-green-400" }
             ].map((kpi, i) => (
               <div key={i} className="bg-slate-800/50 border border-slate-700 p-8 rounded-3xl hover:bg-slate-800 transition-colors">
                 <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mb-4">{kpi.label}</p>
                 <div className="flex items-baseline gap-2">
-                  <span className={`text-5xl font-black tracking-tighter ${kpi.color}`}>{kpi.value}</span>
+                  <span className={`text-4xl font-black tracking-tighter ${kpi.color}`}>{kpi.value}</span>
                   <span className="text-xl font-bold text-slate-500">{kpi.suffix}</span>
                 </div>
               </div>
@@ -200,19 +224,19 @@ export default function Institucional() {
           {/* Tabela de Estados */}
           <div className="bg-slate-800/30 border border-slate-700 rounded-3xl overflow-hidden">
             <div className="p-8 border-b border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4">
-              <h3 className="text-2xl font-bold">Detalhamento por Estado (Amazônia Legal)</h3>
+              <h3 className="text-2xl font-bold">Detalhamento por Estado (Nacional)</h3>
               <div className="flex gap-4 text-sm font-bold text-slate-400">
-                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-400"></span> Bloqueios CMN: 64.216</span>
-                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-400"></span> Conflitos ESG: 15.445</span>
+                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-400"></span> Bloqueios CMN: 80.311</span>
+                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-orange-400"></span> Conflitos ESG: 1.130.973</span>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
               <table className="w-full text-left border-collapse whitespace-nowrap">
-                <thead>
-                  <tr className="bg-slate-800/50 text-slate-400 text-xs uppercase tracking-widest">
+                <thead className="sticky top-0 bg-slate-900 z-10">
+                  <tr className="bg-slate-800 text-slate-400 text-xs uppercase tracking-widest">
                     <th className="p-6 font-bold">Estado</th>
                     <th className="p-6 font-bold">Propriedades</th>
-                    <th className="p-6 font-bold">Área (ha)</th>
+                    <th className="p-6 font-bold">Área (Mi ha)</th>
                     <th className="p-6 font-bold">Falsos Positivos</th>
                     <th className="p-6 font-bold">Violações EUDR</th>
                     <th className="p-6 font-bold">Bloqueios CMN</th>
@@ -236,7 +260,7 @@ export default function Institucional() {
             </div>
           </div>
 
-          {/* METODOLOGIA - COM ESPAÇAMENTO REFORÇADO E TEXTO ORIGINAL */}
+          {/* METODOLOGIA */}
           <div className="pt-48 mt-20 space-y-16 border-t border-slate-800">
             <div className="text-center space-y-6">
               <h3 className="text-4xl md:text-5xl font-black uppercase tracking-tighter">Metodologia de Auditoria Forense Digital e Compliance Socioambiental</h3>
