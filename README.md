@@ -1,6 +1,9 @@
 # 🌿 Caipora Sentinela | Motor de Compliance Geoespacial para o Agronegócio
 
-> **Status:** Orquestração com Airflow + Cosmos • Regras com dbt + BigQuery • Monitoramento MapBiomas • Dashboard em Streamlit • API em FastAPI
+> **Status:** Orquestração com Airflow + Cosmos • Regras com dbt + BigQuery • Monitoramento MapBiomas • Dashboard em Next.js • API em FastAPI
+
+### 📢 Nota de Evolução do Projeto
+O código contido neste repositório representa a **arquitetura base e a prova de conceito (PoC) end-to-end** desenvolvida originalmente com escopo focado no estado de Mato Grosso. Após o sucesso da validação técnica desta arquitetura, o motor foi refatorado, otimizado e **escalado a nível nacional (cobrindo mais de 8,3 milhões de imóveis rurais)** em um repositório privado corporativo de produção.
 
 O Caipora Sentinela é uma plataforma de engenharia de dados geoespaciais para validar critérios ESG em crédito rural e mercado de carbono. O projeto integra dados oficiais (CAR, SIGEF, IBAMA, MTE, ANA) com alertas satelitais do MapBiomas para gerar um veredito de elegibilidade territorial.
 
@@ -43,7 +46,7 @@ O fluxo segue um padrão medallion: ingestão bronze, transformação silver e p
 
 4. **Consumo**
    * FastAPI expõe endpoints de compliance.
-   * Frontend em Next.js/Streamlit serve visualização e relatórios.
+   * Frontend em Next.js serve visualização e relatórios.
 
 ## 🧰 Stack Técnica
 
@@ -54,7 +57,7 @@ O fluxo segue um padrão medallion: ingestão bronze, transformação silver e p
 * Google BigQuery + GCS
 * dbt Core
 * FastAPI + Uvicorn
-* Streamlit / Next.js
+* Next.js
 * Google Earth Engine
 * Nix via Devenv + uv
 

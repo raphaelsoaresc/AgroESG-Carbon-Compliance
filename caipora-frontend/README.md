@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🖥️ Caipora Sentinela - Frontend (Next.js)
 
-## Getting Started
+Este diretório contém a interface de consumo visual do **Caipora Sentinela**. O objetivo desta camada é servir a visualização de relatórios, dashboards de elegibilidade territorial e indicadores analíticos de risco socioambiental para o Agronegócio.
 
-First, run the development server:
+A interface consome diretamente os endpoints de compliance expostos pelo serviço backend em FastAPI (localizado na pasta `/services`).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## 🚀 Stack Técnica do Frontend
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+*   **Frameworks:** Next.js
+*   **Linguagem:** TypeScript / Python
+*   **Estilização:** Tailwind CSS
+*   **Componentes Visuais:** Integração com mapas interativos utilizando dados do IBAMA/INPE e alertas satelitais do MapBiomas.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🌟 O que esta camada entrega
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+*   **Dashboard de Compliance:** Painel para visualização de vereditos de elegibilidade territorial com filtros de risco socioambiental.
+*   **Visualização de Mapas:** Carregamento dinâmico de mapas cruzando o Marco Temporal (pós-2008), sobreposição de Terras Indígenas/Quilombolas e Áreas de Preservação Permanente (APP).
+*   **Emissão de Vereditos:** Interface para geração e exportação automatizada de relatórios de risco em PDF.
 
-## Learn More
+## ⚙️ Como Rodar a Interface
 
-To learn more about Next.js, take a look at the following resources:
+Como o projeto utiliza um ambiente isolado e reprodutível via **Nix (Devenv)** e gerenciamento de dependências via **uv**, o frontend deve ser iniciado preferencialmente através do ecossistema central do repositório.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Através do Ambiente Global (Raiz do Projeto)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Volte para a raiz do repositório, entre no ambiente isolado e garanta que as dependências estejam sincronizadas:
+   ```bash
+   devenv shell
+   uv sync
+   ```
 
-## Deploy on Vercel
+2. Suba todos os serviços orquestrados (o que incluirá esta interface e a API do backend):
+   ```bash
+   devenv up
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📁 Integração no Repositório
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Este diretório funciona de forma integrada com as demais pastas do ecossistema Caipora Sentinela:
+*   `../services/` – Backend em FastAPI que serve os dados para esta interface.
+*   `../utils/` – Helpers e integrações GIS utilizados para manipulação de geometrias espaciais.
+
+## 🔐 Segurança e Variáveis de Ambiente
+
+*   Nunca comite arquivos de ambiente locais (`.env.local` ou `.env`) neste diretório.
+*   Toda integração com endpoints locais ou de staging deve ser configurada via variáveis de ambiente injetadas pelo `devenv`.
